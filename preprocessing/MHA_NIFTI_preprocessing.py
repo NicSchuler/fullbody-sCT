@@ -2,19 +2,40 @@ from pathlib import Path
 import SimpleITK as sitk
 import pandas as pd
 import numpy as np
+import shutil
 
 # --- INPUTS ---
-src_root = Path("/local/scratch/datasets/FullbodySCT/SynthRAD2025/synthRAD2025_Task1_Train")
-base_path = Path("/local/scratch/datasets/FullbodySCT/SynthRAD2025/synthRAD2025_Task1_Train_Nifti")  # must match resample.py
+src_root = Path("/local/scratch/datasets/FullbodySCT/SynthRAD2025/task1/initDataTrainTask1")
+base_path = Path("/local/scratch/datasets/FullbodySCT/SynthRAD2025/task1")  # must match resample.py
 nifti_root = base_path / "nifti"
 excel_dir = base_path / "excel"
 excel_path = excel_dir / "data_CT_MR_TEMP_second_paper.xlsx"
 
-# --- CREATE OUTPUT DIRS ---
-nifti_root.mkdir(parents=True, exist_ok=True)
-excel_dir.mkdir(parents=True, exist_ok=True)
-
 rows = []  # rows for the Excel
+
+AIR_HU_THRESH = -900
+VAL_AIR = -1024
+TISSUE_MIN, TISSUE_MAX = -30, 100
+VAL_TISSUE = 7
+
+
+def read_itk(p: Path) -> sitk.Image:
+    return sitk.ReadImage(str(p))
+
+def write_itk(img: sitk.Image, p: Path):
+    p.parent.mkdir(parents=True, exist_ok=True)
+    sitk.WriteImage(img, str(p))
+
+def to_np(img: sitk.Image) -> np.ndarray:
+    # (Z, Y, X)
+    return sitk.GetArrayFromImage(img)
+
+def to_img(arr: np.ndarray, ref: sitk.Image, pixel_type=None) -> sitk.Image:
+    out = sitk.GetImageFromArray(arr)
+    out.CopyInformation(ref)
+    if pixel_type is not None:
+        out = sitk.Cast(out, pixel_type)
+    return out
 
 def read_spacing_from_nifti(nifti_path: Path):
     img = sitk.ReadImage(str(nifti_path))
@@ -38,6 +59,13 @@ def main():
     mha_dirs = sorted({p.parent for p in src_root.rglob("*.mha")})
     n_cases = len(mha_dirs)
     print(f"Found {n_cases} folders containing .mha files under {src_root}\n")
+    
+    for d in (excel_dir, nifti_root):
+        shutil.rmtree(d, ignore_errors=True)
+        d.mkdir(parents=True, exist_ok=True)
+
+
+    processed = 0
 
     for i, case_dir in enumerate(mha_dirs, start=1):
         if not case_dir.is_dir():
@@ -60,30 +88,51 @@ def main():
         mr_out = out_dir / f"{case_id}_3D_body.nii"
         body_mask_out = out_dir / "3D_mask_body.nii"
 
-        # Convert if present (guard against None)
-        if ct_mha and ct_mha.exists():
-            convert_mha_to_nii(ct_mha, ct_out)
-            print(f"  ✔ CT   → {ct_out.name}")
-        else:
-            print(f"  ⚠ Missing CT for {case_id}")
+        print(f"[{i}/{n_cases}] {case_id}")
 
-        if mr_mha and mr_mha.exists():
-            convert_mha_to_nii(mr_mha, mr_out)
-            print(f"  ✔ MR   → {mr_out.name}")
-        else:
-            print(f"  ⚠ Missing MR for {case_id}")
+        ct_itk = read_itk(ct_mha) if ct_mha and ct_mha.exists() else None
+        mr_itk = read_itk(mr_mha) if mr_mha and mr_mha.exists() else None
+        mask_itk = read_itk(body_mask_mha) if body_mask_mha and body_mask_mha.exists() else None
 
-        if body_mask_mha and body_mask_mha.exists():
-            convert_mha_to_nii(body_mask_mha, body_mask_out)
-            print(f"  ✔ Mask → {body_mask_out.name}")
-        else:
-            print(f"  ⚠ Missing body mask for {case_id}")
+        if mask_itk is None:
+            print(f"Missing body mask for {case_id} — skipping case (resampler requires 3D_mask_body.nii).")
+            continue
 
-        # Add Excel rows for CT + MR if their files exist
-        # Columns used by resample.py: Patient, TreatmentDay, Folder, ModalityFolder, Modality, PathNIFTI,
-        # PixelSpacing, SliceThickness, TumourZcentrSlide, Treatment
-        # Defaults: TreatmentDay='day0', Treatment='T0', TumourZcentrSlide=0
-        if mr_out.exists():
+        mask_np = (to_np(mask_itk) > 0).astype(np.uint8)
+        # Write 3D_mask_body.nii with CT geometry if CT exists, else MR
+        ref_for_mask = ct_itk if ct_itk is not None else (mr_itk if mr_itk is not None else mask_itk)
+        write_itk(to_img(mask_np, ref_for_mask, pixel_type=sitk.sitkUInt8), body_mask_out)
+        have_mr_row = False
+        have_ct_row = False
+
+        if mr_itk is not None:
+            mr_np = to_np(mr_itk).astype(np.float32)
+            mr_body_np = mr_np * mask_np
+            write_itk(to_img(mr_body_np, mr_itk), mr_out)
+            have_mr_row = True
+            print(f"MR masked → {mr_out.name}")
+        else:
+            print(f"Missing MR for {case_id}")
+
+
+        if ct_itk is not None:
+            ct_np = to_np(ct_itk).astype(np.float32)
+            body_bool = mask_np.astype(bool)
+
+            air_np = ((ct_np <= AIR_HU_THRESH) & body_bool).astype(np.uint8)
+
+            ct_over = ct_np.copy()
+            ct_over[air_np.astype(bool)] = VAL_AIR
+            tissue_win = (ct_np >= TISSUE_MIN) & (ct_np <= TISSUE_MAX) & body_bool & (~air_np.astype(bool))
+            ct_over[tissue_win] = VAL_TISSUE
+            write_itk(to_img(ct_over, ct_itk), ct_out)
+
+            have_ct_row = True
+            print(f"CT overwritten → {ct_out.name}")
+        else:
+            print(f"Missing CT for {case_id}")
+
+        if have_mr_row and mr_out.exists():
             sx, sy, sz = read_spacing_from_nifti(mr_out)
             rows.append({
                 "Patient": case_id,
@@ -98,7 +147,7 @@ def main():
                 "Treatment": "T0",
             })
 
-        if ct_out.exists():
+        if have_ct_row and ct_out.exists():
             sx, sy, sz = read_spacing_from_nifti(ct_out)
             rows.append({
                 "Patient": case_id,
@@ -113,11 +162,15 @@ def main():
                 "Treatment": "T0",
             })
 
+        processed += 1
+        if processed % 50 == 0:
+            print(f"Progress: {processed}/{n_cases} cases processed...")
+
     # Build DataFrame and save Excel
     df = pd.DataFrame(rows)
-    # Keep index so it stays compatible with pd.read_excel(..., index_col=0) in resample.py
-    df.to_excel(excel_path)
-    print(f"\nSaved Excel: {excel_path}")
+    df.to_excel(excel_path)  # keep index for compatibility with index_col=0 if you prefer
+    print(f"Done processing. Patient folders with outputs: {processed} out of {n_cases} total.")
+    print(f"Saved Excel: {excel_path}")
     print(f"Prepared NIfTI folders under: {nifti_root}")
 
 if __name__ == "__main__":
