@@ -22,6 +22,14 @@ MASK_BACKGROUND = 0
 def crop_pad_xy(arr: np.ndarray, target: int, background: float) -> np.ndarray:
     """
     Center crop/pad a 3D volume (z, y, x) to (z, target, target) in x/y.
+    TODO: 
+        currently the images are cropped in spatial size. 
+        Check if we better adjust voxel size in terms of
+            1. check what most images look like and define voxel size
+                e.g. if most images are 320x320x320@1mm
+                instead of cropping define 256@1.25mm
+                resample all images --> 1.25
+            2. crop / pad images which are too big/small
     """
     z, y, x = arr.shape
 
