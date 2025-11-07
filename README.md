@@ -56,7 +56,8 @@ Preprocessing steps:
 
 
 ```text
-Task 1/
+ /local/scratch/datasets/FullbodySCT/SynthRAD2023  
+task_1/Task1/
     brain/
         1BXXXX/
             mr.nii.gz
@@ -78,6 +79,28 @@ Task 1/
             1_pelvis_train.xlsx
             1PXXXX_train.png
             ...
+
+task_1_val/Task1/
+    brain/
+        1BXXXX/
+            mr.nii.gz
+            mask.nii.gz
+        ...
+        overview/
+            1_brain_val.xlsx
+            1BXXXX_val.png
+            ...
+
+    pelvis/
+        1PXXXX/
+            mr.nii.gz
+            mask.nii.gz
+        ...
+        overview/
+            1_pelvis_val.xlsx
+            1PXXXX_val.png
+            ...
+
 ```
 
 Notes
@@ -93,7 +116,6 @@ Brain
 |-------------|----------|----------|----------|-------|
 | Train       | 60       | 60       | 60       | 180   |
 | Validation  | 10       | 10       | 10       | 30    |
-| Test        | 20       | 20       | 20       | 60    |
 
 Pelvis
 
@@ -101,7 +123,6 @@ Pelvis
 |-------------|----------|----------|----------|-------|
 | Train       | 120      | 0        | 60       | 180   |
 | Validation  | 20       | 0        | 10       | 30    |
-| Test        | 40       | 0        | 20       | 60    |
 
 
 
@@ -109,7 +130,9 @@ Pelvis
 
 Data from five European university  medical centers [UMC Groningen,UMC Utrecht,Radboud UMC (Netherlands), LMU University Hospital Munich, and University Hospital of Cologne (Germany)].  Data-providing centers are abbreviated using the letters A to E, only A, B, C and D provided data for Task1. 
 
- 890 are MRI-CT
+Data from **center D** is provided with a limited license which permits it's use only for the duration of the challenge and remains valid only while the challenge is active.
+
+ 667 are MRI-CT (excluding Test set as not available).
 
  the dataset was split into a training, validation, and test set, aiming at a split of 65/10/25%.
 
@@ -122,13 +145,10 @@ Data from five European university  medical centers [UMC Groningen,UMC Utrecht,R
 |---------|-------------|----|----|----|----|-----|
 | HN      | Train       | 91 | 0  | 65 | 65 | 221 |
 | HN      | Validation  | 14 | 0  | 10 | 10 | 34  |
-| HN      | Test        | 35 | 0  | 25 | 25 | 85  |
 | TH      | Train       | 91 | 91 | 0  | 0  | 182 |
 | TH      | Validation  | 14 | 14 | 0  | 0  | 28  |
-| TH      | Test        | 35 | 35 | 0  | 0  | 70  |
 | AB      | Train       | 65 | 91 | 19 | 0  | 175 |
 | AB      | Validation  | 10 | 14 | 3  | 0  | 27  |
-| AB      | Test        | 25 | 35 | 8  | 0  | 68  |
 
 Quick totals by split
 
@@ -136,8 +156,7 @@ Quick totals by split
 |-------------|-----|-----|-----|-------|
 | Train       | 221 | 182 | 175 | 578   |
 | Validation  | 34  | 28  | 27  | 89    |
-| Test        | 85  | 70  | 68  | 223   |
-| Sum         | 340 | 280 | 270 | 890   |
+| Sum         | 255 | 210 | 202 | 667   |
 
 Preprocessing steps:
 - **Rigid registration**; MRI were registered to their CT using Elastix. 
@@ -148,64 +167,21 @@ Preprocessing steps:
 - **File conversion**; .mha
 - **Deforming CT to MRI/CBCT**; performed to align the modalities better for
 
-During the visual control, the following observations were made: (1) In some cases, the position of the arms varied between MR/CBCT and CT acquisitions. (2) Image artifacts, such as those caused by metal implants, were present in a limited number of cases. (3) Depending on the definition of anatomical regions and imaging protocols in each center, some thoracic cases are included in the abdominal dataset and vice versa. (4) Variations among patients affected the automatic thresholding process for the definition of the body mask, resulting in the possible inclusion of couch structures or the exclusion of lung regions. As a result of the automatic thresholding and the varying thresholds used, the final dilation margins around the patient outline are different among patients and dataset. (5) The 1HN subset of center C included MRIs with a limited field of view, making rigid and deformable
- registration particularly challenging. These cases may be challenging for sCT generation. (6) Patient outline
- masks in subsets 1AB and 1TH of center B were cropped in the inferior-superior direction due to vary
-ing MRI intensities and frequent artifacts at the edge of the FOV. In some cases, the cropped mask still
- includes artifacts, or the cropping might remove regular slices.
+During the visual control of the publisher, the following observations were made: 
+- (1) In some cases, the position of the arms varied between MR/CBCT and CT acquisitions. 
+- (2) Image artifacts, such as those caused by metal implants, were present in a limited number of cases.
+- (3) Depending on the definition of anatomical regions and imaging protocols in each center, some thoracic cases are included in the abdominal dataset and vice versa.
+- (4) Variations among patients affected the automatic thresholding process for the definition of the body mask, resulting in the possible inclusion of couch structures or the exclusion of lung regions. As a result of the automatic thresholding and the varying thresholds used, the final dilation margins around the patient outline are different among patients and dataset.
+- (5) The 1HN subset of center C included MRIs with a limited field of view, making rigid and deformable
+registration particularly challenging. These cases may be challenging for sCT generation.
+- (6) Patient outline masks in subsets 1AB and 1TH of center B were cropped in the inferior-superior direction due to varying MRI intensities and frequent artifacts at the edge of the FOV. In some cases, the cropped mask still includes artifacts, or the cropping might remove regular slices.
 
- /local/scratch/datasets/FullbodySCT/SynthRAD2025 
+Note: Data from Center D were manually added. 
+
+/local/scratch/datasets/FullbodySCT/SynthRAD2025/
+
  ```text
-    /excel
-
-    /synthRAD2025_Task1_Train
-       /Task1
-            /AB
-                /1AB[A-E][0-9][0-9][0-9]
-                    ct.mha
-                    mask.mha
-                    mr.mha
-                /...
-                /overviews
-                    1ABXXXX_overview.png
-                    ...
-                    1_AB_train_parameters.xlsx
-            /HN
-                /1HN[A-E][0-9][0-9][0-9]
-                    ct.mha
-                    mask.mha
-                    mr.mha
-                /...
-                /overviews
-                    1HNXXXX_overview.png
-                    ...
-                    1_HN_train_parameters.xlsx
-            /TH
-                /1TH[A-E][0-9][0-9][0-9]
-                    ct.mha
-                    mask.mha
-                    mr.mha
-                /...
-                /overviews
-                    1THXXXX_overview.png
-                    ...
-                    1_TH_train_parameters.xlsx   
-
-    /synthRAD2025_Task1_Train_Nifti
-        /excel
-            data_CT_MR_TEMP_second_paper.xlsx
-        /nifti
-            1ABA005
-                1ABA005_3D_body.nii
-                1ABA005_3D_CT_air_overwrite.nii  
-                3D_mask_body.nii
-            ...
-            1THB226
-                1THB226_3D_body.nii
-                1THB226_3D_CT_air_overwrite.nii
-                3D_mask_body.nii
-
-    /synthRAD2025_Task1_Val_Input
+     /synthRAD2025_Task1_Val_Input
         /Task1
             /AB
                 /1AB[A-E][0-9][0-9][0-9]
@@ -234,5 +210,38 @@ ing MRI intensities and frequent artifacts at the edge of the FOV. In some cases
                     1THXXXX_overview.png
                     ...
                     1_TH_val_parameters.xlsx
-```
 
+    /task1
+        /initDataTrainTask1
+            /Task1
+                /AB
+                    /1AB[A-E][0-9][0-9][0-9]
+                        ct.mha
+                        mask.mha
+                        mr.mha
+                    /...
+                    /overviews
+                        1ABXXXX_overview.png
+                        ...
+                        1_AB_train_parameters.xlsx
+                /HN
+                    /1HN[A-E][0-9][0-9][0-9]
+                        ct.mha
+                        mask.mha
+                        mr.mha
+                    /...
+                    /overviews
+                        1HNXXXX_overview.png
+                        ...
+                        1_HN_train_parameters.xlsx
+                /TH
+                    /1TH[A-E][0-9][0-9][0-9]
+                        ct.mha
+                        mask.mha
+                        mr.mha
+                    /...
+                    /overviews
+                        1THXXXX_overview.png
+                        ...
+                        1_TH_train_parameters.xlsx   
+```
