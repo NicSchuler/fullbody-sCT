@@ -54,3 +54,14 @@ setfacl -R -m u:nschuler:rwx /local/scratch/datasets/FullbodySCT/USZ_Data
 ```
 
 Note that this gives read/write access to the files and folders recursively, **but it needs to be run after every modification of files.** This is not like sharing a folder in onedrive but it gives access to the files currently in the folder! It will print lots of errors because you cannot give permission to files owned by someone else but it will still work for those files that you can give access to.
+
+Instead of running this you can also just run the script `grant_access.sh`. 
+
+`cd local/scratch/datasets/FullbodySCT/`
+`./grant_access.sh`
+
+
+# Preprocessing of SynthRAD data
+All the scripts to preprocess the SynthRAD data are in the folder `preprocessing_synthrad`.
+
+They have to be run after each other in the order given by the filenames.
