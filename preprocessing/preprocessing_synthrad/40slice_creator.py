@@ -28,10 +28,6 @@ NN_INPUT_MODE = "2d"
 #SLICE_EXT = "nii.gz"
 SLICE_EXT = "png" #TODO: check if we can create png for pix2pix and nii otherwise
 
-# Train/test split ratio
-TRAIN_RATIO = 0.8
-RANDOM_SEED = 42
-
 # Skip first/last slice to avoid edge artefacts
 SKIP_FIRST_LAST = True
 
@@ -52,17 +48,21 @@ def safe_rmtree_and_make(path: str):
 
 
 def make_output_dirs(base_model: str, base_pix: str):
-    # model: unpaired-style
-    os.makedirs(os.path.join(base_model, "full", "train", "trainA"))
-    os.makedirs(os.path.join(base_model, "full", "train", "trainB"))
-    os.makedirs(os.path.join(base_model, "full", "test", "testA"))
-    os.makedirs(os.path.join(base_model, "full", "test", "testB"))
+        """
+        Create unified slice output directories (no train/test split here).
+        Downstream splitting is handled by 50_dataset_split.py.
+    
+        Layouts created:
+            - model (unpaired-style):  <base_model>/full/{A,B}
+            - pix2pix (paired-style):  <base_pix>/full/{A,B}
+        """
+        # model: unpaired-style
+        os.makedirs(os.path.join(base_model, "full", "A"))
+        os.makedirs(os.path.join(base_model, "full", "B"))
 
-    # pix2pix: paired-style
-    os.makedirs(os.path.join(base_pix, "full", "A", "train"))
-    os.makedirs(os.path.join(base_pix, "full", "A", "test"))
-    os.makedirs(os.path.join(base_pix, "full", "B", "train"))
-    os.makedirs(os.path.join(base_pix, "full", "B", "test"))
+        # pix2pix: paired-style
+        os.makedirs(os.path.join(base_pix, "full", "A"))
+        os.makedirs(os.path.join(base_pix, "full", "B"))
 
 
 def find_ct_nifti_for_patient(patient_dir: str):
@@ -142,7 +142,6 @@ def create_slices_for_pair(
     patient_id: str,
     ct_path: str,
     mr_path: str,
-    split: str,
     base_model: str,
     base_pix: str,
 ):
@@ -150,22 +149,17 @@ def create_slices_for_pair(
     Creates 2D slices for one paired CT–MR volume:
       - MR -> domain A
       - CT -> domain B
-    In:
-      split: "train" or "test"
+    Note: This function does not perform any data split; it writes all slices
+    into unified output folders. Use 50_dataset_split.py afterwards to create
+    train/val/test splits.
     """
     # model (unpaired-style) dirs
-    model_A_dir = os.path.join(
-        base_model, "full", "train" if split == "train" else "test",
-        "trainA" if split == "train" else "testA"
-    )
-    model_B_dir = os.path.join(
-        base_model, "full", "train" if split == "train" else "test",
-        "trainB" if split == "train" else "testB"
-    )
+    model_A_dir = os.path.join(base_model, "full", "A")
+    model_B_dir = os.path.join(base_model, "full", "B")
 
     # pix2pix (paired) dirs
-    pix_A_dir = os.path.join(base_pix, "full", "A", split)
-    pix_B_dir = os.path.join(base_pix, "full", "B", split)
+    pix_A_dir = os.path.join(base_pix, "full", "A")
+    pix_B_dir = os.path.join(base_pix, "full", "B")
 
     os.makedirs(model_A_dir, exist_ok=True)
     os.makedirs(model_B_dir, exist_ok=True)
@@ -207,56 +201,13 @@ def create_slices_for_pair(
 
         slice_name = f"{patient_id}-{i}.{SLICE_EXT}"
 
-        # paired pix2pix-style
+    # paired pix2pix-style
         save_slice(mr_slice, mr_img.affine, os.path.join(pix_A_dir, slice_name), is_mr=True)
         save_slice(ct_slice, ct_img.affine, os.path.join(pix_B_dir, slice_name), is_mr=False)
 
-        # unpaired model dirs
+    # unpaired model dirs
         save_slice(mr_slice, mr_img.affine, os.path.join(model_A_dir, slice_name), is_mr=True)
         save_slice(ct_slice, ct_img.affine, os.path.join(model_B_dir, slice_name), is_mr=False)
-
-
-def stratified_split(patients):
-    """
-    patients: list of (patient_id, ct_path, mr_path)
-    Returns: (train_list, test_list)
-    Stratified by (region, hospital).
-    """
-    rng = np.random.default_rng(RANDOM_SEED)
-
-    strata = defaultdict(list)
-    for pid, ct_p, mr_p in patients:
-        region = parse_region(pid)
-        hosp = parse_hospital(pid)
-        key = (region, hosp)
-        strata[key].append((pid, ct_p, mr_p))
-
-    train, test = [], []
-
-    for key, items in strata.items():
-        rng.shuffle(items)
-        n = len(items)
-        if n == 1:
-            # with only one sample, flip a coin but bias to train
-            if rng.random() < TRAIN_RATIO:
-                train.extend(items)
-            else:
-                test.extend(items)
-        else:
-            n_train = int(round(n * TRAIN_RATIO))
-            # ensure both sets non-empty when possible
-            if n_train == 0:
-                n_train = 1
-            if n_train == n:
-                n_train = n - 1
-            train.extend(items[:n_train])
-            test.extend(items[n_train:])
-
-    print("Stratified by (region, hospital):")
-    print(f"  Total patients: {len(patients)}")
-    print(f"  Train: {len(train)}, Test: {len(test)}")
-
-    return train, test
 
 
 def main():
@@ -283,10 +234,7 @@ def main():
 
     print(f"Found {len(patients)} paired patients")
 
-    # 2) stratified split by (region, hospital)
-    train_patients, test_patients = stratified_split(patients)
-
-    # 3) prepare output structure
+    # 2) prepare output structure (no split here)
     path_model = os.path.join(OUT_ROOT, f"model_{NN_INPUT_MODE}")
     path_pix = os.path.join(OUT_ROOT, f"pix2pix_{NN_INPUT_MODE}")
 
@@ -294,12 +242,9 @@ def main():
     safe_rmtree_and_make(path_pix)
     make_output_dirs(path_model, path_pix)
 
-    # 4) slice generation
-    for pid, ct_p, mr_p in train_patients:
-        create_slices_for_pair(pid, ct_p, mr_p, "train", path_model, path_pix)
-
-    for pid, ct_p, mr_p in test_patients:
-        create_slices_for_pair(pid, ct_p, mr_p, "test", path_model, path_pix)
+    # 3) slice generation (all patients)
+    for pid, ct_p, mr_p in patients:
+        create_slices_for_pair(pid, ct_p, mr_p, path_model, path_pix)
 
     print("Finished slice creation.")
 

@@ -2,14 +2,6 @@
 
 This repo is a collection of sub-projects that require separate environments. Go into the respective folder to find instructions on usage of the respective sub-project.
 
-Todo 
-1. MHA to DICOM or Nifti (perhaps CT_MR_preprocessing.py could be ingnored)
-    - MHA to DICOM: 
-    - MHA to Nifti: Flavian via MHA_NIFTI_preprocessing.py
-2. DICOM files into the folderstructure needed for the script (reprocessing-readme) or anotherway to bring it in CT_MR_preprocessing.py or resampling.py (if directly MHA to Nifti) 
-3. In CT_MR_preprocessing.py Masks are constructed, I think we actually don't need that, we should be able to disable it
-4. Check if it can run (maybe we also need to create an excel file that correctly specifies the train/test split)
-
 ![Fullbody-sCT Workflow](images/Overview.jpg)
 
 USZ Fullbody SCT data is stored in `/local/scratch/datasets/FullbodySCT/USZ_Data` as dcm = DICOM. 
