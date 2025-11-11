@@ -25,7 +25,8 @@ OUT_ROOT = "/local/scratch/datasets/FullbodySCT/SynthRAD2025/task1_backup/5slice
 NN_INPUT_MODE = "2d"
 
 # Slice file format: "nii.gz", "nii", or "png"
-SLICE_EXT = "nii.gz"
+#SLICE_EXT = "nii.gz"
+SLICE_EXT = "png" #TODO: check if we can create png for pix2pix and nii otherwise
 
 # Train/test split ratio
 TRAIN_RATIO = 0.8
