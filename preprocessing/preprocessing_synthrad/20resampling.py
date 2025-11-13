@@ -7,9 +7,10 @@ from pathlib import Path
 # ==========================
 TARGET_SIZE_XY = 256
 
-# Whether to save compressed NIfTI (.nii.gz) or not (.nii)
-src_root = Path("/local/scratch/datasets/FullbodySCT/SynthRAD2025/task1_backup/1initNifti")
-out_path = Path("/local/scratch/datasets/FullbodySCT/SynthRAD2025/task1_backup/2resampledNifti")
+# Unified combined input/output roots under final base
+BASE_ROOT = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed")
+src_root = BASE_ROOT / "1initNifti"
+out_path = BASE_ROOT / "2resampledNifti"
 save_zipped = True
 
 # Background values

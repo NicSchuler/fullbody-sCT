@@ -107,14 +107,12 @@ Brain
 | Split       | Center A | Center B | Center C | Total |
 |-------------|----------|----------|----------|-------|
 | Train       | 60       | 60       | 60       | 180   |
-| Validation  | 10       | 10       | 10       | 30    |
 
 Pelvis
 
 | Split       | Center A | Center B | Center C | Total |
 |-------------|----------|----------|----------|-------|
 | Train       | 120      | 0        | 60       | 180   |
-| Validation  | 20       | 0        | 10       | 30    |
 
 
 
@@ -136,19 +134,14 @@ Data from **center D** is provided with a limited license which permits it's use
 | Anatomy | Split       | A  | B  | C  | D  | All |
 |---------|-------------|----|----|----|----|-----|
 | HN      | Train       | 91 | 0  | 65 | 65 | 221 |
-| HN      | Validation  | 14 | 0  | 10 | 10 | 34  |
 | TH      | Train       | 91 | 91 | 0  | 0  | 182 |
-| TH      | Validation  | 14 | 14 | 0  | 0  | 28  |
 | AB      | Train       | 65 | 91 | 19 | 0  | 175 |
-| AB      | Validation  | 10 | 14 | 3  | 0  | 27  |
 
 Quick totals by split
 
 | Split       | HN  | TH  | AB  | Total |
 |-------------|-----|-----|-----|-------|
 | Train       | 221 | 182 | 175 | 578   |
-| Validation  | 34  | 28  | 27  | 89    |
-| Sum         | 255 | 210 | 202 | 667   |
 
 Preprocessing steps:
 - **Rigid registration**; MRI were registered to their CT using Elastix. 

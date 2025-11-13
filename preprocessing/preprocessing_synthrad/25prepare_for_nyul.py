@@ -6,8 +6,10 @@ save_zipped = True  # ensure naming matches your current files
 MR_SUBDIR = "MR"
 MASK_SUBDIR = "masks"
 
-in_path = Path("/local/scratch/datasets/FullbodySCT/SynthRAD2025/task1_backup/2resampledNifti")
-out_path = Path("/local/scratch/datasets/FullbodySCT/SynthRAD2025/task1_backup/3resampledNifitiNyulReady")
+# Unified combined paths
+BASE_ROOT = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed")
+in_path = BASE_ROOT / "2resampledNifti"
+out_path = BASE_ROOT / "3resampledNiftiNyulReady"
 
 # =================================
 

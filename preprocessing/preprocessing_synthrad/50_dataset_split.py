@@ -15,10 +15,10 @@ Assumptions:
 - Slice files may append extra suffixes (e.g., slice number), which we ignore by extracting the core token via regex.
 - Splits must be at patient level to avoid leakage between train/val/test.
 
-Usage examples:
+Usage examples (updated for combined dataset root):
     1) Build manifest and split lists only (no file moves):
         python 50_dataset_split.py \
-            --input-root /local/scratch/datasets/FullbodySCT/SynthRAD2025/task1_backup/5slicesOutputForModels \
+            --input-root /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/5slicesOutputForModels \
             --ratios 0.7 0.15 0.15 \
             --seed 42 \
             --out-manifest /tmp/splits_manifest.csv \
@@ -26,14 +26,13 @@ Usage examples:
 
     2) Also materialize split folders for pix2pix and cyclegan (copy files):
         python 50_dataset_split.py \
-            --input-root /local/scratch/datasets/FullbodySCT/SynthRAD2025/task1_backup/5slicesOutputForModels \
+            --input-root /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/5slicesOutputForModels \
             --ratios 0.7 0.15 0.15 \
             --seed 42 \
             --out-manifest /tmp/splits_manifest.csv \
             --out-list-dir /tmp/split_lists \
             --materialize-dir /tmp/materialized_splits \
-            --mode both \
-            --link-mode copy
+            --mode both
 
 """
 from __future__ import annotations
@@ -330,10 +329,10 @@ def materialize_splits(materialize_dir: str, splits: Dict[str, List[PatientRecor
                     copy_file(srcB, str(out_B / os.path.basename(srcB)))
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Stratified dataset splitter for SynthRAD with optional slice materialization")
-    p.add_argument("--input-root", required=True, help="Root produced by 40slice_creator.py")
+    p = argparse.ArgumentParser(description="Stratified dataset splitter for SynthRAD (combined 2023+2025) with optional slice materialization")
+    p.add_argument("--input-root", required=True, help="Root produced by 40slice_creator.py (e.g. /.../Synthrad_combined_preprocessed/5slicesOutputForModels)")
     p.add_argument("--nn-mode", choices=["2d", "3d"], default="2d", help="Subfolder mode name used by 40slice_creator")
-    p.add_argument("--include-ext", nargs="+", default=[".nii", ".nii.gz"], help="Slice file extensions to include")
+    p.add_argument("--include-ext", nargs="+", default=[".png", ".nii", ".nii.gz"], help="Slice file extensions to include (PNG default added)")
     p.add_argument("--ratios", nargs=3, type=float, default=[0.7, 0.15, 0.15], metavar=("TRAIN", "VAL", "TEST"), help="Split ratios that sum to 1.0")
     p.add_argument("--seed", type=int, default=42, help="Random seed for splitting")
     p.add_argument("--out-manifest", required=True, help="Path to write CSV manifest with split column")

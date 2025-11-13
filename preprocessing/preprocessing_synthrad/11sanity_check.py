@@ -2,7 +2,8 @@ import pathlib
 import SimpleITK as sitk
 from pathlib import Path
 
-path = Path("/local/scratch/datasets/FullbodySCT/SynthRAD2025/task1_backup/1initNifti")
+# Unified combined output from 10convert_mha_to_nifti.py
+path = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/1initNifti")
 
 def get_first_nifti(folder: pathlib.Path):
     if not folder.exists():

@@ -7,11 +7,11 @@ set -euo pipefail
 
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Paths for the split stage (uses outputs from 40slice_creator)
-SLICES_ROOT="/local/scratch/datasets/FullbodySCT/SynthRAD2025/task1_backup/5slicesOutputForModels"
-MANIFEST="/local/scratch/datasets/FullbodySCT/SynthRAD2025/task1_backup/splits_manifest.csv"
-LIST_DIR="/local/scratch/datasets/FullbodySCT/SynthRAD2025/task1_backup/split_lists"
-MATERIALIZE_DIR="/local/scratch/datasets/FullbodySCT/SynthRAD2025/task1_backup/materialized_splits"
+# Paths for the split stage (uses outputs from 40slice_creator) - final combined root
+SLICES_ROOT="/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/5slicesOutputForModels"
+MANIFEST="/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/splits_manifest.csv"
+LIST_DIR="/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/split_lists"
+MATERIALIZE_DIR="/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/materialized_splits"
 
 echo "[1/7] Convert to NIfTI"
 python "$BASE_DIR/10convert_mha_to_nifti.py"
@@ -34,6 +34,7 @@ python "$BASE_DIR/40slice_creator.py"
 echo "[7/7] Stratified split + materialize for Pix2Pix and CycleGAN"
 python "$BASE_DIR/50_dataset_split.py" \
   --input-root "$SLICES_ROOT" \
+  --include-ext .png \
   --ratios 0.7 0.15 0.15 \
   --seed 42 \
   --out-manifest "$MANIFEST" \
