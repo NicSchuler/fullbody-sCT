@@ -10,14 +10,15 @@ import nibabel as nib
 
 # ===================== CONFIG =====================
 
-# Root with cropped & resampled CT per-patient folders (combined 2023 + 2025):
+# Root with cropped CT & per-patient folders:
 #   CT_ROOT/<PATIENT_ID>/CT_reg/*.nii.gz
 CT_ROOT = "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/2resampledNifti"
 
-# Root with Nyul-normalized MR (combined):
+# Root with Nyul-normalized MR:
+#   MR_ROOT contains files starting with <PATIENT_ID>, e.g. AB_1ABC100_MR_...nii.gz
 MR_ROOT = "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/4nyulNormalizedMRNifti"
 
-# Where to write slice datasets (combined output)
+# Where to write slice datasets
 OUT_ROOT = "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/5slicesOutputForModels"
 
 # Use 2D slices

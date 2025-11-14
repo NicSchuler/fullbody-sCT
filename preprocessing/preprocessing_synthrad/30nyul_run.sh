@@ -1,3 +1,3 @@
-nyul-normalize /local/scratch/datasets/FullbodySCT/SynthRAD2025/task1_backup/3resampledNifitiNyulReady/MR -m /local/scratch/datasets/FullbodySCT/SynthRAD2025/task1_backup/3resampledNifitiNyulReady/masks -o /local/scratch/datasets/FullbodySCT/SynthRAD2025/task1_backup/4nyulNormalizedMRNifti -v --output-max-value 1 --output-min-value 0 --min-percentile 2 --max-percentile 98
+nyul-normalize /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/3resampledNiftiNyulReady/MR -m /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/3resampledNiftiNyulReady/masks -o /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/4nyulNormalizedMRNifti -v --output-max-value 1 --output-min-value 0 --min-percentile 2 --max-percentile 98
 
 echo "Finished at:     $(date)"
