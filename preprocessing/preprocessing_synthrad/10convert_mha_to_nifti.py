@@ -4,7 +4,7 @@ import SimpleITK as sitk
 import shutil
 # --- INPUTS ---
 RAW_ROOTS = [
-    Path("/local/scratch/datasets/FullbodySCT/SynthRAD2025/task1/0initDataTrainTask1/Task1"),
+    Path("/local/scratch/datasets/FullbodySCT/SynthRAD2025/task1/initDataTrainTask1/Task1"),
     Path("/local/scratch/datasets/FullbodySCT/SynthRAD2023/task_1/Task1"),
 ]
 
