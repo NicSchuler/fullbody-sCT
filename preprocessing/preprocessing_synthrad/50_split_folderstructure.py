@@ -25,7 +25,7 @@ Usage:
         --slices-root /.../5slicesOutputForModels \
         --manifest    /.../splits_manifest.csv \
         --out-dir     /.../materialized_splits \
-        --modes both --include-ext .png
+        --modes both --include-ext .nii
 
 Notes:
   - Patient tokens are inferred from filenames using simple regex patterns
@@ -166,7 +166,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Which folder layout(s) to create",
     )
     p.add_argument(
-        "--include-ext", nargs="+", default=[".png"], help="Extensions to include"
+        "--include-ext", nargs="+", default=[".nii"], help="Extensions to include"
     )
     return p.parse_args(argv)
 
