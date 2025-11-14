@@ -3,9 +3,8 @@ import pathlib
 import SimpleITK as sitk
 import shutil
 # --- INPUTS ---
-src_root = Path("/local/scratch/datasets/FullbodySCT/SynthRAD2025/task1_backup/0initDataTrainTask1/Task1")
 RAW_ROOTS = [
-    Path("/local/scratch/datasets/FullbodySCT/SynthRAD2025/task1_backup/0initDataTrainTask1/Task1"),
+    Path("/local/scratch/datasets/FullbodySCT/SynthRAD2025/task1/0initDataTrainTask1/Task1"),
     Path("/local/scratch/datasets/FullbodySCT/SynthRAD2023/task_1/Task1"),
 ]
 
