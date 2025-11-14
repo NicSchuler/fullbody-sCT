@@ -9,6 +9,8 @@ TARGET_SIZE_XY = 256
 
 # Unified combined input/output roots under final base
 BASE_ROOT = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed")
+#BASE_ROOT = Path("/local/scratch/datasets/FullbodySCT/SynthRAD2025/task1_backup")
+
 src_root = BASE_ROOT / "1initNifti"
 out_path = BASE_ROOT / "2resampledNifti"
 save_zipped = True
@@ -20,7 +22,13 @@ MASK_BACKGROUND = 0
 # ==========================
 
 
-def crop_pad_xy(arr: np.ndarray, target: int, background: float) -> np.ndarray:
+def crop_pad_xy(arr: np.ndarray,
+                body_part: str,
+                background: float,
+                current_spacing: tuple,
+                return_new_spacing=False,
+                filename=None
+        ) -> np.ndarray:
     """
     Center crop/pad a 3D volume (z, y, x) to (z, target, target) in x/y.
     TODO: 
@@ -32,17 +40,31 @@ def crop_pad_xy(arr: np.ndarray, target: int, background: float) -> np.ndarray:
                 resample all images --> 1.25
             2. crop / pad images which are too big/small
     """
+    bp = body_part.upper()
+
+    # ---------------------------------------------
+    #   Region-based target size BEFORE resampling
+    # ---------------------------------------------
+    print(f"[START CROP/PAD] {filename}: bodyPart={bp} > background: {background} > current_spacing: {current_spacing}")
+
+    if bp in {"TH", "AB", "PELVIS"}:
+        target_xy = 512
+        need_downsample = True
+    else:  # HN, BRAIN
+        target_xy = 256
+        need_downsample = False
+
     z, y, x = arr.shape
 
     # ---- pad if smaller ----
-    pad_y = max(0, target - y)
-    pad_x = max(0, target - x)
+    pad_y = max(0, target_xy - y)
+    pad_x = max(0, target_xy - x)
 
     if pad_y > 0 or pad_x > 0:
         py_before = pad_y // 2
-        py_after = pad_y - py_before
+        py_after  = pad_y - py_before
         px_before = pad_x // 2
-        px_after = pad_x - px_before
+        px_after  = pad_x - px_before
 
         arr = np.pad(
             arr,
@@ -53,18 +75,63 @@ def crop_pad_xy(arr: np.ndarray, target: int, background: float) -> np.ndarray:
             constant_values=background,
         )
         z, y, x = arr.shape
+    # ---------------------------------------------
+    #   Step 2: crop if larger
+    # ---------------------------------------------
+    if y > target_xy:
+        start_y = (y - target_xy) // 2
+        arr = arr[:, start_y:start_y + target_xy, :]
 
-    # ---- crop if larger ----
-    if y > target:
-        start_y = (y - target) // 2
-        arr = arr[:, start_y:start_y + target, :]
+    if x > target_xy:
+        start_x = (x - target_xy) // 2
+        arr = arr[:, :, start_x:start_x + target_xy]
 
-    if x > target:
-        start_x = (x - target) // 2
-        arr = arr[:, :, start_x:start_x + target]
+    # Safety
+    assert arr.shape[1] == target_xy and arr.shape[2] == target_xy
 
-    # safety check
-    assert arr.shape[1] == target and arr.shape[2] == target, arr.shape
+
+    # ---------------------------------------------
+    #   Step 3: Downsample (TH/AB/PELVIS only)
+    # ---------------------------------------------
+    if need_downsample:
+        # Convert to SITK image
+        img = sitk.GetImageFromArray(arr)
+        img.SetSpacing(current_spacing)
+
+        sx, sy, sz = current_spacing
+        
+        # New spacing doubled
+        new_spacing = (sx*2, sy*2, sz)
+
+        # New size: half in x/y
+        new_size = [
+            arr.shape[2] // 2,   # x dimension (width)
+            arr.shape[1] // 2,   # y dimension (height)
+            arr.shape[0],        # z dimension (num slices)
+        ]
+
+        # Resample
+        resampler = sitk.ResampleImageFilter()
+        resampler.SetSize(new_size)
+        resampler.SetOutputSpacing(new_spacing)
+        resampler.SetInterpolator(sitk.sitkNearestNeighbor)
+        resampler.SetOutputDirection(img.GetDirection())
+        resampler.SetOutputOrigin(img.GetOrigin())
+        resample_img = resampler.Execute(img)
+
+        arr = sitk.GetArrayFromImage(resample_img)
+
+        if return_new_spacing:
+            return arr, new_spacing
+        else:
+            return arr
+
+    # ---------------------------------------------
+    #   Return for HN/BRAIN (no resampling)
+    # ---------------------------------------------
+    if return_new_spacing:
+        return arr, current_spacing
+
     return arr
 
 
@@ -80,11 +147,21 @@ def process_image(
     """
     img = sitk.ReadImage(str(in_path))
     arr = sitk.GetArrayFromImage(img)  # (z, y, x)
+    spacing = img.GetSpacing()
 
-    arr_out = crop_pad_xy(arr, TARGET_SIZE_XY, background)
+    body_part = in_path.name.split("_")[0]
+
+    arr_out, new_spacing = crop_pad_xy(
+        arr,
+        body_part=body_part,
+        background=background,
+        current_spacing=spacing,
+        return_new_spacing=True,
+        filename=in_path.name
+    )
 
     out_img = sitk.GetImageFromArray(arr_out)
-    out_img.SetSpacing(img.GetSpacing())
+    out_img.SetSpacing(new_spacing)
     out_img.SetDirection(img.GetDirection())
     out_img.SetOrigin(img.GetOrigin())
 
@@ -163,10 +240,17 @@ def process_case(case_dir: Path, out_root: Path):
 
 
 def main():
+    count = 0
+    total = sum(1 for d in src_root.iterdir() if d.is_dir())
 
     for case_dir in sorted(src_root.iterdir()):
         if case_dir.is_dir():
             process_case(case_dir, out_path)
+            count += 1
+
+            if count % 25 == 0:
+                print(f"Processed {count}/{total} items…")
+        
 
 
 if __name__ == "__main__":
