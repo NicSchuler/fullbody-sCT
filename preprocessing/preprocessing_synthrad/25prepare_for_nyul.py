@@ -1,27 +1,25 @@
-"""Stage MR + mask volumes for Nyul fitting/applying.
+"""Stage MR + mask volumes for Nyul training and application.
 
-Now manifest-aware: Only TRAIN and VAL patients are staged by default.
-Test patients are excluded to avoid inadvertent leakage in normalization fitting.
+Input (resampled):
+    /.../2resampledNifti/<PATIENT_ID>/<MR_SUBDIR>/*.nii[.gz]
+    /.../2resampledNifti/<PATIENT_ID>/<MASK_SUBDIR>/*.nii[.gz]
 
-Input layout (resampled):
-  /.../2resampledNifti/<PATIENT_ID>/<MR_SUBDIR>/*.nii[.gz]
-  /.../2resampledNifti/<PATIENT_ID>/<MASK_SUBDIR>/*.nii[.gz]
-
-Output layout (Nyul ready):
-  /.../3resampledNiftiNyulReady/MR/<PATIENT_ID>_MR.nii.gz
-  /.../3resampledNiftiNyulReady/masks/<PATIENT_ID>_mask.nii.gz
+Outputs (Nyul-ready):
+    /.../3resampledNiftiNyulReady/trainingforcalc/{MR,masks}/<PATIENT>_*.nii[.gz]
+        - contains TRAIN only (used to fit Nyul)
+    /.../3resampledNiftiNyulReady/valtest/{MR,masks}/<PATIENT>_*.nii[.gz]
+        - contains VAL + TEST (to be normalized using train-fit mapping)
 
 Usage:
-  python 25prepare_for_nyul.py \
-    --base-root /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed \
-    --manifest   /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/splits_manifest.csv
+    python 25prepare_for_nyul.py \
+        --base-root /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed \
+        --manifest   /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/splits_manifest.csv
 
 Optional:
-  --include-test   (also stage TEST patients)
-  --no-gzip        (write .nii instead of .nii.gz)
+    --no-gzip        (write .nii instead of .nii.gz)
 
 Manifest requirements:
-  CSV with columns: split, patient_token
+    CSV with columns: split, patient_token
 """
 
 from pathlib import Path
@@ -47,19 +45,15 @@ DEFAULT_BASE = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_prepr
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description="Prepare MR + masks for Nyul (train+val only by default).")
+    p = argparse.ArgumentParser(description="Prepare MR + masks for Nyul: train-only fitting set + all-data set.")
     p.add_argument("--base-root", default=str(DEFAULT_BASE), help="Pipeline base root containing 2resampledNifti")
     p.add_argument("--manifest", default=str(DEFAULT_BASE / "splits_manifest.csv"), help="CSV manifest with split,patient_token columns")
-    p.add_argument("--include-test", action="store_true", help="Also stage TEST patients")
     p.add_argument("--no-gzip", action="store_true", help="Write .nii instead of .nii.gz")
     return p.parse_args()
 
 
-def load_tokens(manifest: Path, include_test: bool) -> set:
-    wanted_splits = {"train", "val"}
-    if include_test:
-        wanted_splits.add("test")
-    tokens = set()
+def load_split_tokens(manifest: Path) -> dict:
+    splits = {"train": set(), "val": set(), "test": set()}
     with manifest.open("r", newline="") as f:
         reader = csv.DictReader(f)
         if "split" not in reader.fieldnames or "patient_token" not in reader.fieldnames:
@@ -67,9 +61,9 @@ def load_tokens(manifest: Path, include_test: bool) -> set:
         for row in reader:
             split = row["split"].strip().lower()
             token = row["patient_token"].strip()
-            if split in wanted_splits and token:
-                tokens.add(token)
-    return tokens
+            if split in splits and token:
+                splits[split].add(token)
+    return splits
 
 
 def get_first_nifti(folder: Path):
@@ -105,25 +99,54 @@ def main():
     args = parse_args()
     base_root = Path(args.base_root)
     in_path = base_root / "2resampledNifti"
-    out_path = base_root / "3resampledNiftiNyulReady"
+    out_base = base_root / "3resampledNiftiNyulReady"
     manifest = Path(args.manifest)
     if not in_path.exists():
         raise SystemExit(f"Input path missing: {in_path}")
     if not manifest.exists():
         raise SystemExit(f"Manifest missing: {manifest}")
-    tokens = load_tokens(manifest, include_test=args.include_test)
-    if not tokens:
+    split_tokens = load_split_tokens(manifest)
+    train_tokens = split_tokens.get("train", set())
+    val_tokens = split_tokens.get("val", set())
+    test_tokens = split_tokens.get("test", set())
+    valtest_tokens = set().union(val_tokens, test_tokens)
+    if not train_tokens and not valtest_tokens:
         raise SystemExit("No tokens loaded (check manifest and splits).")
-    staged = 0
+
+    train_out = out_base / "trainingforcalc"
+    valtest_out = out_base / "valtest"
+    staged_train = 0
+    staged_valtest = 0
     for case_dir in sorted(in_path.iterdir()):
         if not case_dir.is_dir():
             continue
         case_token = extract_token(case_dir.name) or case_dir.name
-        if case_token not in tokens:
+        did_any = False
+        if case_token in valtest_tokens:
+            if prepare_case(case_dir, valtest_out, zipped=not args.no_gzip, out_token=case_token):
+                staged_valtest += 1
+                did_any = True
+        if case_token in train_tokens:
+            if prepare_case(case_dir, train_out, zipped=not args.no_gzip, out_token=case_token):
+                staged_train += 1
+                did_any = True
+        if not did_any:
             continue
-        if prepare_case(case_dir, out_path, zipped=not args.no_gzip, out_token=case_token):
-            staged += 1
-    print(f"[DONE] Staged {staged} patients -> {out_path}")
+    print(f"[DONE] Staged train-for-calc: {staged_train} -> {train_out}")
+    print(f"[DONE] Staged val+test:       {staged_valtest} -> {valtest_out}")
+
+    def count_in(dir_path: Path) -> int:
+        if not dir_path.exists():
+            return 0
+        return sum(1 for _ in dir_path.glob("*.nii")) + sum(1 for _ in dir_path.glob("*.nii.gz"))
+
+    tr_mr = count_in(train_out / "MR")
+    tr_ms = count_in(train_out / "masks")
+    vt_mr = count_in(valtest_out / "MR")
+    vt_ms = count_in(valtest_out / "masks")
+
+    print(f"[COUNT] trainingforcalc -> MR: {tr_mr}, masks: {tr_ms}")
+    print(f"[COUNT] valtest         -> MR: {vt_mr}, masks: {vt_ms}")
 
 
 if __name__ == "__main__":

@@ -26,7 +26,7 @@ NN_INPUT_MODE = "2d"
 
 # Slice file format: "nii.gz", "nii", or "png"
 #SLICE_EXT = "nii.gz"
-SLICE_EXT = "png" #TODO: check if we can create png for pix2pix and nii otherwise
+SLICE_EXT = "nii" #TODO: check if we can create png for pix2pix and nii otherwise
 
 # Skip first/last slice to avoid edge artefacts
 SKIP_FIRST_LAST = True
