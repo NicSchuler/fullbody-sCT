@@ -17,11 +17,15 @@ Sources are the outputs of 40slice_creator.py:
   - cyclegan: <slices_root>/model_2d/full/{A,B}
 
 Usage:
-  python 50_dataset_split.py \
-    --slices-root /.../5slicesOutputForModels \
-    --manifest    /.../splits_manifest.csv \
-    --out-dir     /.../materialized_splits \
-    --modes both --include-ext .png
+    # With sensible defaults (no arguments needed):
+    python 50_split_folderstructure.py
+
+    # Or override paths as needed:
+    python 50_split_folderstructure.py \
+        --slices-root /.../5slicesOutputForModels \
+        --manifest    /.../splits_manifest.csv \
+        --out-dir     /.../materialized_splits \
+        --modes both --include-ext .png
 
 Notes:
   - Patient tokens are inferred from filenames using simple regex patterns
@@ -139,9 +143,22 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description="Materialize split folder structure from manifest (no splitting)."
     )
-    p.add_argument("--slices-root", required=True, help="Root produced by 40slice_creator.py")
-    p.add_argument("--manifest", required=True, help="CSV with columns: split, patient_token")
-    p.add_argument("--out-dir", required=True, help="Destination root for materialized_splits")
+    DEFAULT_BASE = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed")
+    p.add_argument(
+        "--slices-root",
+        default=str(DEFAULT_BASE / "5slicesOutputForModels"),
+        help="Root produced by 40slice_creator.py",
+    )
+    p.add_argument(
+        "--manifest",
+        default=str(DEFAULT_BASE / "splits_manifest.csv"),
+        help="CSV with columns: split, patient_token",
+    )
+    p.add_argument(
+        "--out-dir",
+        default=str(DEFAULT_BASE / "materialized_splits"),
+        help="Destination root for materialized_splits",
+    )
     p.add_argument(
         "--modes",
         choices=["pix2pix", "cyclegan", "both"],

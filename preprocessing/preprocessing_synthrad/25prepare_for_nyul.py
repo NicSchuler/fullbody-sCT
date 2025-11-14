@@ -28,15 +28,28 @@ from pathlib import Path
 import shutil
 import argparse
 import csv
+import re
+from typing import Optional
 
 MR_SUBDIR = "MR"
 MASK_SUBDIR = "masks"
 
+# Accept tokens like 1ABA005, 1HND012, 1BA123 even when prefixed in folder names
+RE_TOKEN = re.compile(r"1(?:AB|HN|TH|B|P)[A-D][0-9]{3}")
+
+
+def extract_token(text: str) -> Optional[str]:
+    m = RE_TOKEN.search(text)
+    return m.group(0) if m else None
+
+
+DEFAULT_BASE = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed")
+
 
 def parse_args():
     p = argparse.ArgumentParser(description="Prepare MR + masks for Nyul (train+val only by default).")
-    p.add_argument("--base-root", required=True, help="Pipeline base root containing 2resampledNifti")
-    p.add_argument("--manifest", required=True, help="CSV manifest with split,patient_token columns")
+    p.add_argument("--base-root", default=str(DEFAULT_BASE), help="Pipeline base root containing 2resampledNifti")
+    p.add_argument("--manifest", default=str(DEFAULT_BASE / "splits_manifest.csv"), help="CSV manifest with split,patient_token columns")
     p.add_argument("--include-test", action="store_true", help="Also stage TEST patients")
     p.add_argument("--no-gzip", action="store_true", help="Write .nii instead of .nii.gz")
     return p.parse_args()
@@ -69,8 +82,8 @@ def get_first_nifti(folder: Path):
     return None
 
 
-def prepare_case(case_dir: Path, out_root: Path, zipped: bool):
-    case_id = case_dir.name
+def prepare_case(case_dir: Path, out_root: Path, zipped: bool, out_token: Optional[str] = None):
+    case_id = out_token or case_dir.name
     mr_in = get_first_nifti(case_dir / MR_SUBDIR)
     mask_in = get_first_nifti(case_dir / MASK_SUBDIR)
     if mr_in is None:
@@ -105,9 +118,10 @@ def main():
     for case_dir in sorted(in_path.iterdir()):
         if not case_dir.is_dir():
             continue
-        if case_dir.name not in tokens:
+        case_token = extract_token(case_dir.name) or case_dir.name
+        if case_token not in tokens:
             continue
-        if prepare_case(case_dir, out_path, zipped=not args.no_gzip):
+        if prepare_case(case_dir, out_path, zipped=not args.no_gzip, out_token=case_token):
             staged += 1
     print(f"[DONE] Staged {staged} patients -> {out_path}")
 
