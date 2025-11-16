@@ -205,3 +205,15 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+
+
+
+training/checkpoints/*
+training/datasets/*
+training/docs/*
+training/imgs/*
+training/results/*
+training/data/latest_test
+training/data/normalization
+training/data/*/
