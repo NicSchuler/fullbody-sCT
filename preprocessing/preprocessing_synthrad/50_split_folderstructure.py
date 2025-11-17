@@ -41,6 +41,7 @@ import os
 import re
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from tqdm import tqdm
 
 from shutil import copy2
 
@@ -122,14 +123,19 @@ def materialize_mode(
     idxA = index_by_token(list_files(srcA, include_ext))
     idxB = index_by_token(list_files(srcB, include_ext))
 
-    for split, tokens in splits_tokens.items():
-        dstA = dst_base / split / "A"
-        dstB = dst_base / split / "B"
+    for split, tokens in tqdm(splits_tokens.items()):
+        folderA = "A"
+        folderB = "B"
+        if mode == "cyclegan": ## for cycleGan we want to subfolders to be named like --> trainA, trainB, testA, testB etc.
+            folderA = f"{split}A"
+            folderB = f"{split}B"
+        dstA = dst_base / split / folderA
+        dstB = dst_base / split / folderB
         ensure_dir(dstA)
         ensure_dir(dstB)
 
         nA = nB = 0
-        for t in tokens:
+        for t in tqdm(tokens):
             for src in idxA.get(t, []):
                 copy2(src, dstA / src.name)
                 nA += 1
@@ -146,7 +152,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     DEFAULT_BASE = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed")
     p.add_argument(
         "--slices-root",
-        default=str(DEFAULT_BASE / "5slicesOutputForModels"),
+        default=str(DEFAULT_BASE / "5slicesOutputForModelsNonNormalized"),
         help="Root produced by 40slice_creator.py",
     )
     p.add_argument(
@@ -156,7 +162,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     )
     p.add_argument(
         "--out-dir",
-        default=str(DEFAULT_BASE / "materialized_splits"),
+        default=str(DEFAULT_BASE / "6materialized_splitsNonNormalized"),
         help="Destination root for materialized_splits",
     )
     p.add_argument(

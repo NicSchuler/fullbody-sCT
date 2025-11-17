@@ -4,6 +4,7 @@ import os
 import shutil
 from glob import glob
 from collections import defaultdict
+from tqdm import tqdm
 
 import numpy as np
 import nibabel as nib
@@ -13,13 +14,14 @@ import nibabel as nib
 # Root with cropped CT & per-patient folders:
 #   CT_ROOT/<PATIENT_ID>/CT_reg/*.nii.gz
 CT_ROOT = "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/2resampledNifti"
+MR_ROOT = "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/2resampledNifti"
 
 # Root with Nyul-normalized MR:
 #   MR_ROOT contains files starting with <PATIENT_ID>, e.g. AB_1ABC100_MR_...nii.gz
-MR_ROOT = "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/4nyulNormalizedMRNifti"
+#MR_ROOT = "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/4nyulNormalizedMRNifti"
 
 # Where to write slice datasets
-OUT_ROOT = "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/5slicesOutputForModels"
+OUT_ROOT = "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/5slicesOutputForModelsNonNormalized"
 
 # Use 2D slices
 NN_INPUT_MODE = "2d"
@@ -32,7 +34,7 @@ SLICE_EXT = "nii" #TODO: check if we can create png for pix2pix and nii otherwis
 SKIP_FIRST_LAST = True
 
 # Clamp Nyul MR values into [0,1]
-CLAMP_MR = True
+CLAMP_MR = False
 
 # ==================================================
 
@@ -213,7 +215,7 @@ def create_slices_for_pair(
 def main():
     # 1) discover paired patients
     patients = []
-    for entry in sorted(os.listdir(CT_ROOT)):
+    for entry in tqdm(sorted(os.listdir(CT_ROOT))):
         patient_dir = os.path.join(CT_ROOT, entry)
         if not os.path.isdir(patient_dir):
             continue
@@ -226,7 +228,7 @@ def main():
         if mr_path is None:
             print(f"!WARNING! No MR found for patient {entry}, skipping")
             continue
-
+        
         patients.append((entry, ct_path, mr_path))
 
     if not patients:
@@ -243,7 +245,7 @@ def main():
     make_output_dirs(path_model, path_pix)
 
     # 3) slice generation (all patients)
-    for pid, ct_p, mr_p in patients:
+    for pid, ct_p, mr_p in tqdm(patients):
         create_slices_for_pair(pid, ct_p, mr_p, path_model, path_pix)
 
     print("Finished slice creation.")
