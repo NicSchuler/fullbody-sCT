@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=1 python train.py --dataroot '/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/6materialized_splitsNonNormalized/cyclegan/train' --name synthrad_cyclegan_fullbody --model cycle_gan --input_nc 1 --output_nc 1 ```
