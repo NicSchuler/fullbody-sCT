@@ -209,7 +209,10 @@ __marimo__/
 
 
 
-training/checkpoints/*
+training/checkpoints/nifti_NEW_sCT_CUT_whole_data_pix2pix/
+training/checkpoints/cyclegan_full_synthrad/
+training/checkpoints/synthrad_cyclegan_fullbody/
+training/checkpoints/*/*.pth
 training/datasets/*
 training/docs/*
 training/imgs/*
