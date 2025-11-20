@@ -14,10 +14,10 @@ def mean_absolute_error(image_true, image_generated,slice_mask): # , arr_diff_nu
 
     """
     diff=abs(image_true - image_generated)
-    if slice_mask.shape==diff.shape:
-        diff_masked = diff[slice_mask ==1]
-    else:
+    if slice_mask is None or slice_mask.shape!=diff.shape: 
         diff_masked = diff
+    else:
+        diff_masked = diff[slice_mask ==1]
 
     # arr_diff_numerical=arr_diff_numerical.append(diff_masked.flatten())
 
@@ -67,10 +67,10 @@ def mean_and_graph_absolute_error(real_dct_numpy, fake_ct_numpy, slice_mask_air_
 
 def mean_squared_error(image_true, image_generated,slice_mask):
     diff = abs(image_true - image_generated)
-    if slice_mask.shape==diff.shape:
-        diff_masked = diff[slice_mask ==1]
-    else:
+    if slice_mask is None or slice_mask.shape!=diff.shape: 
         diff_masked = diff
+    else:
+        diff_masked = diff[slice_mask ==1]
 
     mse = (diff_masked ** 2).mean()
     return mse
@@ -87,10 +87,10 @@ def peak_signal_to_noise_ratio(image_true, image_generated,slice_mask):
         psnr: (float) peak signal-to-noise ratio"""
     diff = abs(image_true - image_generated)
 
-    if slice_mask.shape==diff.shape:
-        diff_masked = diff[slice_mask ==1]
-    else:
+    if slice_mask is None or slice_mask.shape!=diff.shape: 
         diff_masked = diff
+    else:
+        diff_masked = diff[slice_mask ==1]
     mse = (diff_masked ** 2).mean()
 
     max_pixel = 3071+1024
