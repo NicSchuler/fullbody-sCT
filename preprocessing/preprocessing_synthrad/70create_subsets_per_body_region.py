@@ -93,6 +93,12 @@ def main():
         os.path.join("pix2pix", "AB", "train"),
         os.path.join("pix2pix", "AB", "val"),
         os.path.join("pix2pix", "AB", "test"),
+        os.path.join("pix2pix", "test", "A"),
+        os.path.join("pix2pix", "test", "B"),
+        os.path.join("pix2pix", "train", "A"),
+        os.path.join("pix2pix", "train", "B"),
+        os.path.join("pix2pix", "val", "A"),
+        os.path.join("pix2pix", "val", "B"),
     ]
 
     # cyclegan: full structure
