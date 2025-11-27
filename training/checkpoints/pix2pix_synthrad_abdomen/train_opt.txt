@@ -1,5 +1,5 @@
 ----------------- Options ---------------
-               batch_size: 1                             
+               batch_size: 100                           	[default: 1]
                     beta1: 0.5                           
           checkpoints_dir: ./checkpoints                 
            continue_train: False                         
@@ -27,7 +27,7 @@
                  n_epochs: 100                           
            n_epochs_decay: 100                           
                n_layers_D: 3                             
-                     name: pix2pix_synthrad_abdomen      	[default: experiment_name]
+                     name: pix2pix_synthrad_abdomen3     	[default: experiment_name]
                       ndf: 64                            
                      netD: basic                         
                      netG: unet_256                      
@@ -41,7 +41,7 @@
                     phase: train                         
                 pool_size: 0                             
                preprocess: resize_and_crop               
-               print_freq: 100                           
+               print_freq: 1                             	[default: 100]
              save_by_iter: False                         
           save_epoch_freq: 5                             
          save_latest_freq: 5000                          
