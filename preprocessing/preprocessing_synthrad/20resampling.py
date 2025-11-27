@@ -21,6 +21,45 @@ MR_BACKGROUND = 0
 MASK_BACKGROUND = 0
 # ==========================
 
+def normalize_ct(arr):
+    """
+    Normalize CT values to [0, 1] range using fixed HU window.
+    Standard fullbody CT range: -1024 (air) to +1200 (dense bone)
+    
+    Mapping:
+        -1024 HU (air/background) -> 0
+        +1200 HU (dense bone) -> 1
+    
+    This ensures consistent scaling across all CT images.
+    """
+    arr = np.clip(arr, -1024, 1200)
+    arr = (arr + 1024) / 2224.0  # Maps -1024→0, 1200→1
+    return arr.astype(np.float32)
+
+def normalize_mr(arr):
+    """
+    Normalize MRI values to [0, 1] range using 99th percentile of foreground.
+    
+    Mapping:
+        0 (background) -> 0
+        p99 (99th percentile of non-zero values) -> 1
+        Values above p99 are clipped to 1
+    
+    This is per-image min-max rescaling with outlier removal.
+    """
+    # Calculate p99 only on non-zero (foreground) pixels
+    foreground = arr[arr > 0]
+    if foreground.size > 0:
+        p99 = np.percentile(foreground, 99)
+        if p99 > 0:
+            arr = arr / p99  # Scale by p99
+            arr = np.clip(arr, 0, 1)  # Clip to [0, 1] range
+        else:
+            arr = np.zeros_like(arr)
+    else:
+        arr = np.zeros_like(arr)
+    return arr.astype(np.float32)
+
 
 def crop_pad_xy(arr: np.ndarray,
                 body_part: str,
@@ -29,17 +68,6 @@ def crop_pad_xy(arr: np.ndarray,
                 return_new_spacing=False,
                 filename=None
         ) -> np.ndarray:
-    """
-    Center crop/pad a 3D volume (z, y, x) to (z, target, target) in x/y.
-    TODO: 
-        currently the images are cropped in spatial size. 
-        Check if we better adjust voxel size in terms of
-            1. check what most images look like and define voxel size
-                e.g. if most images are 320x320x320@1mm
-                instead of cropping define 256@1.25mm
-                resample all images --> 1.25
-            2. crop / pad images which are too big/small
-    """
     bp = body_part.upper()
 
     # ---------------------------------------------
@@ -115,6 +143,7 @@ def crop_pad_xy(arr: np.ndarray,
         resampler.SetSize(new_size)
         resampler.SetOutputSpacing(new_spacing)
         resampler.SetInterpolator(sitk.sitkNearestNeighbor)
+        resampler.SetDefaultPixelValue(background)
         resampler.SetOutputDirection(img.GetDirection())
         resampler.SetOutputOrigin(img.GetOrigin())
         resample_img = resampler.Execute(img)
@@ -151,6 +180,11 @@ def process_image(
 
     body_part = in_path.name.split("_")[0]
 
+    # Determine modality and normalization type - check filename only, not full path
+    is_ct = "CT" in in_path.name
+    is_mr = "MR" in in_path.name
+
+    # First do geometric transformations with original values
     arr_out, new_spacing = crop_pad_xy(
         arr,
         body_part=body_part,
@@ -159,6 +193,12 @@ def process_image(
         return_new_spacing=True,
         filename=in_path.name
     )
+
+    # Then normalize AFTER geometric transformations to avoid interpolation artifacts
+    if is_ct:
+        arr_out = normalize_ct(arr_out)
+    elif is_mr:
+        arr_out = normalize_mr(arr_out)
 
     out_img = sitk.GetImageFromArray(arr_out)
     out_img.SetSpacing(new_spacing)
