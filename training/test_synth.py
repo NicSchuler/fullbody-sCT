@@ -56,15 +56,15 @@ import pandas as pd
 from glob import glob
 from training.scripts.synthrad25scripts.develop_niftitodicom_synth import convertNsave
 import shutil
+from tqdm import tqdm 
 # from pytorch_fid import fid_score
 
 ct_slice_dir = os.path.join("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/7materialized_splitsNonNormalizedBodyRegion/AB/pix2pix/test/B")
 # e.g. if opt.dataroot = ".../data", opt.phase="test":
 # path_excel_final_split = "/<PATH>/data/excel/train_test_split_second_paper.xls"
 
-ct_max_value=1200
-ct_min_value=-1024
-
+ct_max_value=1200.0
+ct_min_value=-1024.0
 
 if __name__ == '__main__':
     opt = TestOptions().parse()  # get test options
@@ -73,7 +73,7 @@ if __name__ == '__main__':
     opt.batch_size = 1    # test code only supports batch_size = 1
     opt.serial_batches = True  # disable data shuffling; comment this line if results on randomly chosen images are needed.
     opt.no_flip = True    # no flip; comment this line if results on flipped images are needed.
-    opt.display_id = -1   # no visdom display; the test code saves the results to a HTML file.
+    #opt.display_id = -1   # no visdom display; the test code saves the results to a HTML file.
     opt.device = 'cuda'
     dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
     # train_dataset = create_dataset(util.copyconf(opt, phase="train"))
@@ -106,15 +106,25 @@ if __name__ == '__main__':
         model.eval()
 
 
-    for i, data in enumerate(dataset):
+    for i, data in tqdm(enumerate(dataset), total=len(dataset)):
         model.set_input(data)  # unpack data from data loader
         model.test()           # run inference
         visuals = model.get_current_visuals()  # get image results real_a, fake_B, real_B
         img_path = model.get_image_paths()     # get image paths
         # apply metrics
 
-        fake_ct_numpy = visuals["fake_B"][0].clamp(-1024.0, 1200.0).cpu().float().numpy().astype(np.int16).squeeze()
+        #fake_ct_numpy = visuals["fake_B"][0].clamp(-1024.0, 1200.0).cpu().float().numpy().astype(np.int16).squeeze()
         # real_ct_numpy = real_ct[0].clamp(-1024.0, 3071.0).cpu().float().numpy().astype(np.int16).squeeze()
+
+
+        fake_norm = visuals["fake_B"][0].cpu().float().numpy().squeeze()
+        fake_hu = (fake_norm+1)/2 * (ct_max_value - ct_min_value) + ct_min_value
+        fake_ct_numpy = np.clip(fake_hu, ct_min_value, ct_max_value).astype(np.int16)
+        fake_ct_numpy = np.rot90(fake_ct_numpy, -1)
+        fake_ct_numpy = np.fliplr(fake_ct_numpy)
+        #print("Fake CT numpy min/max:", fake_ct_numpy.min(), fake_ct_numpy.max())
+        #print("fake_ct_numpy shape:", fake_ct_numpy.shape)
+
 
         file_name = os.path.basename(img_path[0])
         treatment,slice = file_name.split('-')
@@ -124,12 +134,15 @@ if __name__ == '__main__':
         real_ct_path = os.path.join(ct_slice_dir, file_name)
 
         real_ct_image = nib.load(real_ct_path)
-        real_ct_nii_array = real_ct_image.get_fdata()   # shape e.g. (H, W) or (H, W, 1)
-        real_ct_nii_array = np.squeeze(real_ct_nii_array)  # remove extra dims if needed
-        real_ct_nii_array[real_ct_nii_array < ct_min_value] = ct_min_value
-        real_ct_nii_array[real_ct_nii_array > ct_max_value] = ct_max_value
 
-        real_ct_numpy = real_ct_nii_array.astype(np.int16)
+        real_ct_nii_array = real_ct_image.get_fdata().squeeze()  # normalized [0,1]
+
+        real_hu = real_ct_nii_array * (ct_max_value - ct_min_value) + ct_min_value
+        real_ct_numpy = np.clip(real_hu, ct_min_value, ct_max_value).astype(np.int16)
+        real_ct_numpy = np.rot90(real_ct_numpy, -1)
+        real_ct_numpy = np.fliplr(real_ct_numpy)
+
+        #print("real_ct_numpy shape:", real_ct_numpy.shape)
 
 
         mae = mean_absolute_error(real_ct_numpy, fake_ct_numpy,None)
@@ -155,7 +168,7 @@ if __name__ == '__main__':
         nib.save(real_ct_nif, os.path.join(path_real_nifti, treatment + "_" + slice_idx + ".nii"))
 
 
-        if i % 5 == 0:  # save images to an HTML file
+        if i % 1000 == 0:  # save images to an HTML file
             print('processing (%04d)-th image... %s' % (i, img_path))
         save_images(webpage, visuals, img_path, width=opt.display_winsize)
         webpage.save()  # save the HTML
