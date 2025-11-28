@@ -1,3 +1,16 @@
+"""
+Usage:
+    python 60combine_A_B_for_pix2pix.py [normalization_method]
+
+Examples:
+    python 60combine_A_B_for_pix2pix.py 31baseline
+    python 60combine_A_B_for_pix2pix.py 32p99
+    python 60combine_A_B_for_pix2pix.py 33nyul
+    python 60combine_A_B_for_pix2pix.py 34npeaks
+
+If no argument is provided, uses default: 32p99
+"""
+import sys
 from pathlib import Path
 
 import nibabel as nib
@@ -5,7 +18,40 @@ import numpy as np
 from tqdm import tqdm
 
 
-ROOT = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/6materialized_splitsNonNormalized/pix2pix")
+# Default normalization method
+NORMALIZATION_METHOD = "32p99"  # Default
+
+# Base directory
+BASE_ROOT = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed")
+
+# Will be set based on NORMALIZATION_METHOD
+ROOT = None
+
+
+def configure_paths(method: str):
+    """Configure paths based on normalization method."""
+    global ROOT
+    
+    valid_methods = ["31baseline", "32p99", "33nyul", "34npeaks"]
+    
+    if method not in valid_methods:
+        raise ValueError(
+            f"Invalid normalization method: '{method}'\n"
+            f"Valid options: {valid_methods}"
+        )
+    
+    ROOT = BASE_ROOT / f"6materialized_splits_{method}" / "pix2pix"
+    
+    if not ROOT.exists():
+        raise FileNotFoundError(
+            f"Input directory not found: {ROOT}\n"
+            f"Please run 50_split_folderstructure.py {method} first"
+        )
+    
+    print("=" * 60)
+    print(f"Normalization method: {method}")
+    print(f"Input root: {ROOT}")
+    print("=" * 60)
 
 def concat_nifti_pair(path_a: Path, path_b: Path, out_path: Path):
     """Load two NIfTI files, concatenate vertically (A on top, B below), save as NIfTI."""
@@ -82,9 +128,17 @@ def create_pairs(root: Path):
 
 
 def main():
-    root = ROOT
-
-    create_pairs(root)
+    global NORMALIZATION_METHOD
+    
+    # Parse command line argument if provided
+    if len(sys.argv) > 1:
+        NORMALIZATION_METHOD = sys.argv[1]
+    
+    # Configure paths based on normalization method
+    configure_paths(NORMALIZATION_METHOD)
+    
+    create_pairs(ROOT)
+    print(f"\nCompleted creating A+B pairs for {NORMALIZATION_METHOD}")
 
 
 if __name__ == "__main__":

@@ -17,14 +17,18 @@ Sources are the outputs of 40slice_creator.py:
   - cyclegan: <slices_root>/model_2d/full/{A,B}
 
 Usage:
-    # With sensible defaults (no arguments needed):
-    python 50_split_folderstructure.py
+    # With normalization method (auto-configures paths):
+    python 50_split_folderstructure.py 32p99
 
-    # Or override paths as needed:
+    # Or specify different method:
+    python 50_split_folderstructure.py 31baseline
+    python 50_split_folderstructure.py 33nyul
+    python 50_split_folderstructure.py 34npeaks
+
+    # Or override paths manually:
     python 50_split_folderstructure.py \
-        --slices-root /.../5slicesOutputForModels \
-        --manifest    /.../splits_manifest.csv \
-        --out-dir     /.../materialized_splits \
+        --slices-root /.../5slices_32p99 \
+        --out-dir     /.../6materialized_splits_32p99 \
         --modes both --include-ext .nii
 
 Notes:
@@ -151,9 +155,16 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     )
     DEFAULT_BASE = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed")
     p.add_argument(
+        "normalization_method",
+        nargs="?",
+        default="32p99",
+        choices=["31baseline", "32p99", "33nyul", "34npeaks"],
+        help="Normalization method (default: 32p99). Automatically configures slices-root and out-dir.",
+    )
+    p.add_argument(
         "--slices-root",
-        default=str(DEFAULT_BASE / "5slicesOutputForModelsNonNormalized"),
-        help="Root produced by 40slice_creator.py",
+        default=None,
+        help="Root produced by 40slice_creator.py (auto-configured from normalization_method if not provided)",
     )
     p.add_argument(
         "--manifest",
@@ -162,8 +173,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     )
     p.add_argument(
         "--out-dir",
-        default=str(DEFAULT_BASE / "6materialized_splitsNonNormalized"),
-        help="Destination root for materialized_splits",
+        default=None,
+        help="Destination root for materialized_splits (auto-configured from normalization_method if not provided)",
     )
     p.add_argument(
         "--modes",
@@ -174,7 +185,16 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument(
         "--include-ext", nargs="+", default=[".nii"], help="Extensions to include"
     )
-    return p.parse_args(argv)
+    
+    args = p.parse_args(argv)
+    
+    # Auto-configure paths based on normalization method if not explicitly provided
+    if args.slices_root is None:
+        args.slices_root = str(DEFAULT_BASE / f"5slices_{args.normalization_method}")
+    if args.out_dir is None:
+        args.out_dir = str(DEFAULT_BASE / f"6materialized_splits_{args.normalization_method}")
+    
+    return args
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -183,6 +203,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     slices_root = Path(args.slices_root)
     manifest = Path(args.manifest)
     out_root = Path(args.out_dir)
+
+    print("=" * 60)
+    print(f"Normalization method: {args.normalization_method}")
+    print(f"Slices root: {slices_root}")
+    print(f"Manifest:    {manifest}")
+    print(f"Output root: {out_root}")
+    print(f"Modes:       {args.modes}")
+    print("=" * 60)
 
     if not slices_root.exists():
         print(f"[error] slices-root not found: {slices_root}")

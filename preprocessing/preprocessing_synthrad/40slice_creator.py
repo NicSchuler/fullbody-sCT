@@ -1,6 +1,24 @@
 #!/usr/bin/env python
 
+"""
+Usage:
+    python 40slice_creator.py [normalization_method]
+
+Examples:
+    python 40slice_creator.py 31baseline
+    python 40slice_creator.py 32p99
+    python 40slice_creator.py 33nyul
+    python 40slice_creator.py 34npeaks
+
+If no argument is provided, uses default: 32p99 (per-file p99)
+
+This will:
+    - Read from: 3normalized_{method}/
+    - Write to:  5slices_{method}/
+"""
+
 import os
+import sys
 import shutil
 from glob import glob
 from collections import defaultdict
@@ -11,17 +29,18 @@ import nibabel as nib
 
 # ===================== CONFIG =====================
 
-# Root with cropped CT & per-patient folders:
-#   CT_ROOT/<PATIENT_ID>/CT_reg/*.nii.gz
-CT_ROOT = "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/2resampledNifti"
-MR_ROOT = "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/2resampledNifti"
+# NORMALIZATION_METHOD: Choose which preprocessing pipeline to use
+# Options: "31baseline", "32p99", "33nyul", "34npeaks"
+# Can be overridden via command line argument: python 40slice_creator.py 32p99
+NORMALIZATION_METHOD = "32p99"  # Default: per-file p99
 
-# Root with Nyul-normalized MR:
-#   MR_ROOT contains files starting with <PATIENT_ID>, e.g. AB_1ABC100_MR_...nii.gz
-#MR_ROOT = "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/4nyulNormalizedMRNifti"
+# Base directory
+BASE_ROOT = "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed"
 
-# Where to write slice datasets
-OUT_ROOT = "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/5slicesOutputForModelsNonNormalized"
+# Will be set dynamically based on NORMALIZATION_METHOD
+CT_ROOT = None
+MR_ROOT = None
+OUT_ROOT = None
 
 # Use 2D slices
 NN_INPUT_MODE = "2d"
@@ -212,7 +231,55 @@ def create_slices_for_pair(
         save_slice(ct_slice, ct_img.affine, os.path.join(model_B_dir, slice_name), is_mr=False)
 
 
+def configure_paths(method: str):
+    """Configure input/output paths based on normalization method."""
+    global CT_ROOT, MR_ROOT, OUT_ROOT
+    
+    valid_methods = ["31baseline", "32p99", "33nyul", "34npeaks"]
+    
+    if method not in valid_methods:
+        raise ValueError(
+            f"Invalid normalization method: '{method}'\n"
+            f"Valid options: {valid_methods}"
+        )
+    
+    # Input: normalized data from 31-34 scripts
+    CT_ROOT = os.path.join(BASE_ROOT, f"3normalized_{method}")
+    MR_ROOT = os.path.join(BASE_ROOT, f"3normalized_{method}")
+    
+    # Output: slices with matching suffix
+    OUT_ROOT = os.path.join(BASE_ROOT, f"5slices_{method}")
+    
+    # Verify input directories exist
+    if not os.path.exists(CT_ROOT):
+        raise FileNotFoundError(
+            f"Input directory not found: {CT_ROOT}\n"
+            f"Please run the corresponding normalization script first (e.g., {method}_standardization.py)"
+        )
+    
+    print(f"=" * 60)
+    print(f"Normalization method: {method}")
+    print(f"CT_ROOT  = {CT_ROOT}")
+    print(f"MR_ROOT  = {MR_ROOT}")
+    print(f"OUT_ROOT = {OUT_ROOT}")
+    print(f"=" * 60)
+
+
 def main():
+    global NORMALIZATION_METHOD
+    
+    # Parse command line argument if provided
+    if len(sys.argv) > 1:
+        NORMALIZATION_METHOD = sys.argv[1]
+    
+    # Configure paths based on normalization method
+    configure_paths(NORMALIZATION_METHOD)
+    
+    print(f"Input mode: {NN_INPUT_MODE}")
+    print(f"Skip first/last slice: {SKIP_FIRST_LAST}")
+    print(f"Slice extension: {SLICE_EXT}")
+    print()
+
     # 1) discover paired patients
     patients = []
     for entry in tqdm(sorted(os.listdir(CT_ROOT))):
