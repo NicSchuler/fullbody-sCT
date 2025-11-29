@@ -59,8 +59,14 @@ from tqdm import tqdm
 # from pytorch_fid import fid_score
 
 ct_slice_dir = os.path.join("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/7materialized_splitsNonNormalizedBodyRegion/AB/pix2pix/test/B")
-# e.g. if opt.dataroot = ".../data", opt.phase="test":
-# path_excel_final_split = "/<PATH>/data/excel/train_test_split_second_paper.xls"
+
+# ---- body mask config ----
+use_mask = False  # set True to use masks when computing metrics
+mask_slice_base_dir = os.path.join(
+    "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/1initNifti"
+)
+
+
 
 ct_max_value=1200.0
 ct_min_value=-1024.0
@@ -106,34 +112,26 @@ if __name__ == '__main__':
 
 
     for i, data in tqdm(enumerate(dataset), total=len(dataset)):
+        #model and load image
         model.set_input(data)  # unpack data from data loader
         model.test()           # run inference
         visuals = model.get_current_visuals()  # get image results real_a, fake_B, real_B
         img_path = model.get_image_paths()     # get image paths
-        # apply metrics
 
-        #fake_ct_numpy = visuals["fake_B"][0].clamp(-1024.0, 1200.0).cpu().float().numpy().astype(np.int16).squeeze()
-        # real_ct_numpy = real_ct[0].clamp(-1024.0, 3071.0).cpu().float().numpy().astype(np.int16).squeeze()
-
-
+        #fake image processing
         fake_norm = visuals["fake_B"][0].cpu().float().numpy().squeeze()
         fake_hu = (fake_norm+1)/2 * (ct_max_value - ct_min_value) + ct_min_value
         fake_ct_numpy = np.clip(fake_hu, ct_min_value, ct_max_value).astype(np.int16)
         fake_ct_numpy = np.rot90(fake_ct_numpy, -1)
         fake_ct_numpy = np.fliplr(fake_ct_numpy)
-        #print("Fake CT numpy min/max:", fake_ct_numpy.min(), fake_ct_numpy.max())
-        #print("fake_ct_numpy shape:", fake_ct_numpy.shape)
 
-
+        #real image processing
         file_name = os.path.basename(img_path[0])
         treatment,slice = file_name.split('-')
         slice= slice.split('.')[0]
         slice_idx = file_name.split('-')[1].split('.')[0]
-
         real_ct_path = os.path.join(ct_slice_dir, file_name)
-
         real_ct_image = nib.load(real_ct_path)
-
         real_ct_nii_array = real_ct_image.get_fdata().squeeze()  # normalized [0,1]
 
         real_hu = real_ct_nii_array * (ct_max_value - ct_min_value) + ct_min_value
@@ -141,12 +139,31 @@ if __name__ == '__main__':
         real_ct_numpy = np.rot90(real_ct_numpy, -1)
         real_ct_numpy = np.fliplr(real_ct_numpy)
 
-        #print("real_ct_numpy shape:", real_ct_numpy.shape)
+        mask = None
+        if use_mask:
+            #load mask
+            mask_slice_path = os.path.join(mask_slice_base_dir, treatment, "sliced_masks", treatment + "-" + slice_idx + ".nii")
+            if os.path.exists(mask_slice_path):
+                mask_img = nib.load(mask_slice_path)
+                mask_array = mask_img.get_fdata().squeeze()
+
+                # apply same transforms as for CT images
+                mask_array = np.rot90(mask_array, -1)
+                mask_array = np.fliplr(mask_array)
+                mask = mask_array.astype(bool)
+            else:
+                print(f"Warning: Mask not found for {file_name}, skipping mask.")
 
 
-        mae = mean_absolute_error(real_ct_numpy, fake_ct_numpy,None)
-        mse = mean_squared_error(real_ct_numpy, fake_ct_numpy,None)
-        psnr = peak_signal_to_noise_ratio(real_ct_numpy, fake_ct_numpy, None)
+                
+
+        else:
+            print(f"Warning: Mask not found for {file_name}, skipping mask.")
+
+        # compute metrics
+        mae = mean_absolute_error(real_ct_numpy, fake_ct_numpy,mask)
+        mse = mean_squared_error(real_ct_numpy, fake_ct_numpy,mask)
+        psnr = peak_signal_to_noise_ratio(real_ct_numpy, fake_ct_numpy, mask)
         ssim = structural_similarity_index(real_ct_numpy, fake_ct_numpy)
 
         res_test.append([mae, mse, psnr,  ssim])

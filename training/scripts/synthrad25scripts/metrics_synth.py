@@ -13,17 +13,15 @@ def mean_absolute_error(image_true, image_generated,slice_mask): # , arr_diff_nu
         image_generated: (Tensor) generated image
 
     """
-    diff=abs(image_true - image_generated)
-    if slice_mask is None or slice_mask.shape!=diff.shape: 
+    diff = np.abs(image_true - image_generated)
+
+    if slice_mask is None or slice_mask.shape != diff.shape:
         diff_masked = diff
     else:
-        diff_masked = diff[slice_mask ==1]
-
-    # arr_diff_numerical=arr_diff_numerical.append(diff_masked.flatten())
-
-
-    mae= (np.abs(diff_masked)).mean()
-    return mae # , arr_diff_numerical
+        # works for both boolean masks and 0/1 masks
+        diff_masked = diff[slice_mask != 0]
+    mae = diff_masked.mean()
+    return mae  # , arr_diff_numerical
 
 def mean_and_graph_absolute_error(real_dct_numpy, fake_ct_numpy, slice_mask_air_or, air_ct_value, results_path,treatment,slice, sCT_diff, dCT_diff):
 
