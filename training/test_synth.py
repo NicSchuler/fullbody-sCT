@@ -54,7 +54,6 @@ import nibabel as nib
 import numpy as np
 import pandas as pd
 from glob import glob
-from training.scripts.synthrad25scripts.develop_niftitodicom_synth import convertNsave
 import shutil
 from tqdm import tqdm 
 # from pytorch_fid import fid_score
@@ -89,7 +88,7 @@ if __name__ == '__main__':
 
     res_test = []
 
-    results_path=os.path.join("/home/user/fthuer/fullbody-sCT/training/data/latest_test/",opt.name)
+    results_path=os.path.join("/local/scratch/datasets/FullbodySCT/9latestTestImages",opt.name)
 
     if os.path.exists(results_path):
         print("Such path {} exists. Removing it".format(results_path))
