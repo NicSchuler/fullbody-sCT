@@ -40,7 +40,9 @@ BASE_ROOT = "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed"
 # Will be set dynamically based on NORMALIZATION_METHOD
 CT_ROOT = None
 MR_ROOT = None
+SLICE_ROOT = None
 OUT_ROOT = None
+PATH_OUTPUT_MASK = None
 
 # Use 2D slices
 NN_INPUT_MODE = "2d"
@@ -108,13 +110,13 @@ def find_mr_nifti_for_patient(mr_root: str, patient_id: str):
     if files:
         return files[0]
 
-    # Fallback: any file with patient_id prefix
-    pattern = os.path.join(mr_root, "**", f"{patient_id}*.nii*")
+    return None
+
+def find_slice_nifti_for_patient(slice_root: str, patient_id: str):
+    pattern = os.path.join(slice_root, "**", f"{patient_id}*mask*.nii*")
     files = sorted(glob(pattern, recursive=True))
     if files:
         return files[0]
-
-    return None
 
 
 def parse_region(patient_id: str) -> str:
@@ -165,6 +167,7 @@ def create_slices_for_pair(
     mr_path: str,
     base_model: str,
     base_pix: str,
+    mask_path: str
 ):
     """
     Creates 2D slices for one paired CT–MR volume:
@@ -190,12 +193,14 @@ def create_slices_for_pair(
     # load volumes
     ct_img = nib.load(ct_path)
     mr_img = nib.load(mr_path)
+    mask_img = nib.load(mask_path)
 
     ct = ct_img.get_fdata()
     mr = mr_img.get_fdata()
+    mask = mask_img.get_fdata()
 
-    if ct.shape != mr.shape:
-        print(f"!WARNING! Shape mismatch for {patient_id}: CT{ct.shape} vs MR{mr.shape}, skipping")
+    if ct.shape != mr.shape != mask.shape:
+        print(f"!WARNING! Shape mismatch for {patient_id}: CT{ct.shape} vs MR{mr.shape} vs Mask{mask.shape}, skipping")
         return
 
     if ct.ndim != 3:
@@ -213,27 +218,31 @@ def create_slices_for_pair(
         if NN_INPUT_MODE == "2d":
             mr_slice = mr[..., i:i+1]  # (x, y, 1)
             ct_slice = ct[..., i:i+1]
+            mask_slice = mask[..., i:i+1]
         else:
             # pseudo3d: 3 slices as channels
             if i == 0 or i == nz - 1:
                 continue
             mr_slice = mr[..., i-1:i+2]
             ct_slice = ct[..., i-1:i+2]
+            mask_slice = mask[..., i-1:i+2]
 
         slice_name = f"{patient_id}-{i}.{SLICE_EXT}"
 
     # paired pix2pix-style
         save_slice(mr_slice, mr_img.affine, os.path.join(pix_A_dir, slice_name), is_mr=True)
         save_slice(ct_slice, ct_img.affine, os.path.join(pix_B_dir, slice_name), is_mr=False)
+        save_slice(mask_slice, mask_img.affine, os.path.join(PATH_OUTPUT_MASK, slice_name), is_mr=False)
 
     # unpaired model dirs
         save_slice(mr_slice, mr_img.affine, os.path.join(model_A_dir, slice_name), is_mr=True)
         save_slice(ct_slice, ct_img.affine, os.path.join(model_B_dir, slice_name), is_mr=False)
+        save_slice(mask_slice, mask_img.affine, os.path.join(PATH_OUTPUT_MASK, slice_name), is_mr=False)
 
 
 def configure_paths(method: str):
     """Configure input/output paths based on normalization method."""
-    global CT_ROOT, MR_ROOT, OUT_ROOT
+    global CT_ROOT, MR_ROOT, OUT_ROOT, SLICE_ROOT
     
     valid_methods = ["31baseline", "32p99", "33nyul", "34npeaks"]
     
@@ -246,6 +255,7 @@ def configure_paths(method: str):
     # Input: normalized data from 31-34 scripts
     CT_ROOT = os.path.join(BASE_ROOT, f"3normalized_{method}")
     MR_ROOT = os.path.join(BASE_ROOT, f"3normalized_{method}")
+    SLICE_ROOT = os.path.join(BASE_ROOT, f"3normalized_{method}")
     
     # Output: slices with matching suffix
     OUT_ROOT = os.path.join(BASE_ROOT, f"5slices_{method}")
@@ -262,6 +272,7 @@ def configure_paths(method: str):
     print(f"CT_ROOT  = {CT_ROOT}")
     print(f"MR_ROOT  = {MR_ROOT}")
     print(f"OUT_ROOT = {OUT_ROOT}")
+    print(f"SLICE_ROOT = {SLICE_ROOT}")
     print(f"=" * 60)
 
 
@@ -295,8 +306,14 @@ def main():
         if mr_path is None:
             print(f"!WARNING! No MR found for patient {entry}, skipping")
             continue
+
+        mask_path = find_slice_nifti_for_patient(SLICE_ROOT, entry)
+        if mask_path is None:
+            print(f"!WARNING! No mask slice found for patient {entry}, skipping")
+            continue
+
         
-        patients.append((entry, ct_path, mr_path))
+        patients.append((entry, ct_path, mr_path, mask_path))
 
     if not patients:
         raise RuntimeError("No paired CT+MR patients found. Check CT_ROOT and MR_ROOT.")
@@ -311,9 +328,14 @@ def main():
     safe_rmtree_and_make(path_pix)
     make_output_dirs(path_model, path_pix)
 
+    global PATH_OUTPUT_MASK
+
+    PATH_OUTPUT_MASK = os.path.join(OUT_ROOT, "masks")
+    safe_rmtree_and_make(PATH_OUTPUT_MASK)
+
     # 3) slice generation (all patients)
-    for pid, ct_p, mr_p in tqdm(patients):
-        create_slices_for_pair(pid, ct_p, mr_p, path_model, path_pix)
+    for pid, ct_p, mr_p, mask_p in tqdm(patients):
+        create_slices_for_pair(pid, ct_p, mr_p, path_model, path_pix, mask_p)
 
     print("Finished slice creation.")
 
