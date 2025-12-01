@@ -55,15 +55,14 @@ import numpy as np
 import pandas as pd
 from glob import glob
 import shutil
+from pathlib import Path
 from tqdm import tqdm 
 # from pytorch_fid import fid_score
 
-ct_slice_dir = os.path.join("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/7materialized_splitsNonNormalizedBodyRegion/AB/pix2pix/test/B")
-
 # ---- body mask config ----
-use_mask = False  # set True to use masks when computing metrics
+use_mask = True  # set True to use masks when computing metrics
 mask_slice_base_dir = os.path.join(
-    "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/1initNifti"
+    "/local/scratch/datasets/FullbodySCT/flavian_subset/5slices_31baseline/masks"
 )
 
 
@@ -83,6 +82,8 @@ if __name__ == '__main__':
     dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
     # train_dataset = create_dataset(util.copyconf(opt, phase="train"))
     model = create_model(opt)      # create a model given opt.model and other options
+    data_root = Path(opt.dataroot)
+    ct_slice_dir = data_root.parent / "test" / "B"
     # create a webpage for viewing the results
     web_dir = os.path.join(opt.results_dir, opt.name, '{}_{}'.format(opt.phase, opt.epoch))  # define the website directory
     print('creating web directory', web_dir)
@@ -94,7 +95,7 @@ if __name__ == '__main__':
 
     res_test = []
 
-    results_path=os.path.join("/local/scratch/datasets/FullbodySCT/9latestTestImages",opt.name)
+    results_path=os.path.join("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/9latestTestImages",opt.name)
 
     if os.path.exists(results_path):
         print("Such path {} exists. Removing it".format(results_path))
@@ -142,7 +143,7 @@ if __name__ == '__main__':
         mask = None
         if use_mask:
             #load mask
-            mask_slice_path = os.path.join(mask_slice_base_dir, treatment, "sliced_masks", treatment + "-" + slice_idx + ".nii")
+            mask_slice_path = os.path.join(mask_slice_base_dir, file_name)
             if os.path.exists(mask_slice_path):
                 mask_img = nib.load(mask_slice_path)
                 mask_array = mask_img.get_fdata().squeeze()
@@ -153,12 +154,6 @@ if __name__ == '__main__':
                 mask = mask_array.astype(bool)
             else:
                 print(f"Warning: Mask not found for {file_name}, skipping mask.")
-
-
-                
-
-        else:
-            print(f"Warning: Mask not found for {file_name}, skipping mask.")
 
         # compute metrics
         mae = mean_absolute_error(real_ct_numpy, fake_ct_numpy,mask)
@@ -203,8 +198,3 @@ if __name__ == '__main__':
     ], index=[ 'Test set']).T
 
     print(st_d_df)
-
-
-
-
-
