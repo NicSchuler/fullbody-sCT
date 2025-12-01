@@ -83,7 +83,10 @@ if __name__ == '__main__':
     # train_dataset = create_dataset(util.copyconf(opt, phase="train"))
     model = create_model(opt)      # create a model given opt.model and other options
     data_root = Path(opt.dataroot)
-    ct_slice_dir = data_root.parent / "test" / "B"
+    if (opt.model == 'pix2pix'):
+        ct_slice_dir = data_root.parent / "test" / "B"
+    else:
+        ct_slice_dir = data_root.parent / "test" / "testB"
     # create a webpage for viewing the results
     web_dir = os.path.join(opt.results_dir, opt.name, '{}_{}'.format(opt.phase, opt.epoch))  # define the website directory
     print('creating web directory', web_dir)
