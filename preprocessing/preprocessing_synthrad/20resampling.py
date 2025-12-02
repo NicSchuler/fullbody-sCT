@@ -130,12 +130,12 @@ def crop_pad_xy(arr: np.ndarray,
     return arr
 
 
-def _compute_mask_bbox_xy(mask_arr: np.ndarray, margin: int = 10):
+def _compute_mask_bbox_xy(mask_arr: np.ndarray, margin: int = 0):
     """Compute 2D bounding box (y0:y1, x0:x1) over all z slices for a 3D mask.
 
     Parameters:
         mask_arr: np.ndarray (z, y, x) with binary mask values
-        margin: int pixels to extend on all sides
+        margin: int pixels to extend on all sides (default 0)
 
     Returns:
         (y0, y1, x0, x1) inclusive-exclusive indices
@@ -204,22 +204,18 @@ def crop_letterbox_to_mask(
     background: float,
     target_xy: int = 256,
     modality: str = "CT",
-    margin: int = 10,
 ):
-    """Crop the image to the mask's XY bounding box (+margin), then fit to target size with letterbox.
+    """Crop to the mask XY bounding box, then resample strictly to target size (256x256).
 
-    Steps:
-      1) Compute mask XY bbox across all slices and crop both image and mask using SITK ROI (Z kept).
-      2) Resample both to fit within target_xy preserving aspect (linear for image, NN for mask).
-      3) Pad both to exactly (target_xy, target_xy) centered.
-      4) Apply mask: set outside-mask voxels to background.
+    Always performs strict resize to exactly (target_xy, target_xy) with linear interpolation for CT/MR
+    and nearest-neighbor for masks. No padding is used.
 
     Returns:
-      out_arr (np.ndarray z,y,x), out_spacing (tuple)
+        out_arr (np.ndarray z,y,x), out_spacing (tuple)
     """
     # Convert mask to array to compute bbox in array coordinates (z, y, x)
     mask_arr = sitk.GetArrayFromImage(mask_img)
-    bbox = _compute_mask_bbox_xy(mask_arr, margin=margin)
+    bbox = _compute_mask_bbox_xy(mask_arr, margin=0)
     if bbox is None:
         # No foreground; return a fully background image, padded to target
         arr = sitk.GetArrayFromImage(img)
@@ -235,40 +231,36 @@ def crop_letterbox_to_mask(
     cropped_img = _roi_crop_sitk(img, x0, y0, w, h)
     cropped_mask = _roi_crop_sitk(mask_img, x0, y0, w, h)
 
-    # Resample to fit
     interp_img = sitk.sitkLinear if modality.upper() in {"CT", "MR", "MRI"} else sitk.sitkLinear
-    img_fit = _resample_fit_xy(cropped_img, target_xy, interp_img, background)
-    mask_fit = _resample_fit_xy(cropped_mask, target_xy, sitk.sitkNearestNeighbor, 0)
+
+    # Resample directly to target size (256x256) ignoring aspect ratio
+    in_size = cropped_img.GetSize()
+    in_spacing = cropped_img.GetSpacing()
+    out_size = [int(target_xy), int(target_xy), int(in_size[2])]
+    out_spacing = (
+        in_spacing[0] * (in_size[0] / target_xy),
+        in_spacing[1] * (in_size[1] / target_xy),
+        in_spacing[2],
+    )
+
+    def resample_exact(img_in, interp, default_val):
+        r = sitk.ResampleImageFilter()
+        r.SetSize(out_size)
+        r.SetOutputSpacing(out_spacing)
+        r.SetInterpolator(interp)
+        r.SetDefaultPixelValue(float(default_val))
+        r.SetOutputDirection(img_in.GetDirection())
+        r.SetOutputOrigin(img_in.GetOrigin())
+        return r.Execute(img_in)
+
+    img_fit = resample_exact(cropped_img, interp_img, background)
+    mask_fit = resample_exact(cropped_mask, sitk.sitkNearestNeighbor, 0)
 
     # Convert to arrays for padding
     arr_img = sitk.GetArrayFromImage(img_fit)   # (z, y, x)
     arr_mask = sitk.GetArrayFromImage(mask_fit)
 
-    z, y, x = arr_img.shape
-    pad_y = max(0, target_xy - y)
-    pad_x = max(0, target_xy - x)
-
-    py_before = pad_y // 2
-    py_after = pad_y - py_before
-    px_before = pad_x // 2
-    px_after = pad_x - px_before
-
-    arr_img = np.pad(
-        arr_img,
-        ((0, 0), (py_before, py_after), (px_before, px_after)),
-        mode="constant",
-        constant_values=background,
-    )
-    arr_mask = np.pad(
-        arr_mask,
-        ((0, 0), (py_before, py_after), (px_before, px_after)),
-        mode="constant",
-        constant_values=0,
-    )
-
-    # If still larger than target (rare rounding), center-crop
-    arr_img = arr_img[:, :target_xy, :target_xy]
-    arr_mask = arr_mask[:, :target_xy, :target_xy]
+    # No letterboxing/padding: arrays are already target size
 
     # Ensure binary mask
     arr_mask = (arr_mask > 0.5).astype(np.uint8)
@@ -307,7 +299,7 @@ def process_image(
     is_ct = "CT" in in_path.name.upper()
     is_mr = "MR" in in_path.name.upper()
 
-    # If a mask is provided, use mask-based crop + letterbox fit to 256
+    # If a mask is provided, use mask-based crop + strict resize to 256
     if mask_path is not None and Path(mask_path).exists() and not is_label:
         mask_img = sitk.ReadImage(str(mask_path))
         out_arr, new_spacing = crop_letterbox_to_mask(
@@ -316,10 +308,9 @@ def process_image(
             background=background,
             target_xy=TARGET_SIZE_XY,
             modality="CT" if is_ct else "MR",
-            margin=10,
         )
         arr_out = out_arr
-        print(f"  → Mask-bbox crop+letterbox applied to {in_path.name}; output shape: {arr_out.shape}")
+        print(f"  → Mask-bbox crop + strict-resize applied to {in_path.name}; output shape: {arr_out.shape}")
     else:
         # Fallback to legacy center crop/pad + (optional region downsample)
         arr_out, new_spacing = crop_pad_xy(
