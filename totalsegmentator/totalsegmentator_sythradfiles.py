@@ -60,7 +60,7 @@ def run_totalseg_for_ct(ct_path: str) -> None:
 
     # 1) Liver
     if has_liver_mask(output_dir):
-        print("✅ Liver mask already exists — skipping liver segmentation.")
+        print("Liver mask already exists — skipping liver segmentation.")
     else:
         print(" -> Liver (task='total', roi_subset=['liver'])")
         totalsegmentator(
@@ -75,7 +75,7 @@ def run_totalseg_for_ct(ct_path: str) -> None:
     # 2) Fat (subcutaneous_fat, torso_fat, skeletal_muscle, ...)
     print(" -> Fat & muscle (task='tissue_types')")
     if has_fat_masks(output_dir):
-        print("✅ Fat & muscle masks already exist — skipping fat segmentation.")
+        print("Fat & muscle masks already exist — skipping fat segmentation.")
     else:
         print(" -> Fat & muscle (task='tissue_types')")
         totalsegmentator(
