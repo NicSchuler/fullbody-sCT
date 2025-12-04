@@ -28,6 +28,21 @@ def find_ct_reg_nii(patient_dir: str) -> str | None:
 
     return candidates[0] if candidates else None
 
+def has_liver_mask(output_dir: str) -> bool:
+    """Check whether the liver mask already exists."""
+    return os.path.exists(os.path.join(output_dir, "liver.nii.gz"))
+
+def has_fat_masks(output_dir: str) -> bool:
+    """Check whether the fat-related masks already exist."""
+    expected = [
+        "subcutaneous_fat.nii.gz",
+        "torso_fat.nii.gz",
+        "skeletal_muscle.nii.gz",
+    ]
+    return all(os.path.exists(os.path.join(output_dir, f)) for f in expected)
+
+
+
 def run_totalseg_for_ct(ct_path: str) -> None:
     """
     Run TotalSegmentator on a single CT:
@@ -44,25 +59,32 @@ def run_totalseg_for_ct(ct_path: str) -> None:
     print(f"Output dir: {output_dir}")
 
     # 1) Liver
-    print(" -> Liver (task='total', roi_subset=['liver'])")
-    totalsegmentator(
-        ct_path,
-        output_dir,
-        task="total",
-        roi_subset=["liver"],
-        fast=True,
-        device="gpu",   # change to "cpu" if needed
-    )
+    if has_liver_mask(output_dir):
+        print("✅ Liver mask already exists — skipping liver segmentation.")
+    else:
+        print(" -> Liver (task='total', roi_subset=['liver'])")
+        totalsegmentator(
+            ct_path,
+            output_dir,
+            task="total",
+            roi_subset=["liver"],
+            fast=True,
+            device="gpu",
+        )
 
     # 2) Fat (subcutaneous_fat, torso_fat, skeletal_muscle, ...)
     print(" -> Fat & muscle (task='tissue_types')")
-    totalsegmentator(
-        ct_path,
-        output_dir,
-        task="tissue_types",
-        fast=False,
-        device="gpu",
-    )
+    if has_fat_masks(output_dir):
+        print("✅ Fat & muscle masks already exist — skipping fat segmentation.")
+    else:
+        print(" -> Fat & muscle (task='tissue_types')")
+        totalsegmentator(
+            ct_path,
+            output_dir,
+            task="tissue_types",
+            fast=False,  # fast not allowed here
+            device="gpu",
+        )
 
     # 3) Body mask -currently done only if needed
     if False:
