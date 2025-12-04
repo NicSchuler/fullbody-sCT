@@ -1,0 +1,34 @@
+# TotalSegmentator Batch Segmentation Script
+
+This repository contains a Python script (`run_totalseg_batch.py`) for running **[TotalSegmentator](https://github.com/wasserth/TotalSegmentator)** on multiple CT scans automatically.  
+It processes each patient folder, detects the `CT_reg` image, and generates segmentation masks for the **liver**, **fat**, and **body**.
+
+---
+
+## 🧠 Overview
+
+For each patient directory (e.g. `AB_1ABA009`), the script:
+
+1. Finds the CT image in: `<PATIENT_FOLDER>/CT_reg/<something>CT_reg.nii.gz`
+2. Creates an output directory:
+3. Runs TotalSegmentator to generate:
+- **Liver mask** – via `task="total", roi_subset=["liver"]`
+- **Fat & muscle masks** – via `task="tissue_types"`
+- **Body mask** – via `task="body"`
+
+Each set of masks is saved as NIfTI files (`.nii.gz`) inside the output folder.
+
+---
+
+## ⚙️ Requirements
+
+- Python ≥ 3.9  
+- Conda environment (recommended)
+- [PyTorch](https://pytorch.org/get-started/locally) (CPU or CUDA GPU build)
+- [TotalSegmentator](https://github.com/wasserth/TotalSegmentator)
+
+Example setup:
+```bash
+conda env create -f environment.yml
+conda activate totalseg
+

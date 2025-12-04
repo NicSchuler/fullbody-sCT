@@ -1,0 +1,6 @@
+name: totalseg
+channels:
+  - defaults
+dependencies:
+  - python=3.10
+prefix: /home/user/fthuer/miniconda3/envs/totalseg
