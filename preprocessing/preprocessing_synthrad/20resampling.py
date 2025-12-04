@@ -1,6 +1,7 @@
 import numpy as np
 import SimpleITK as sitk
 from pathlib import Path
+from tqdm import tqdm
 
 # ==========================
 # Global config
@@ -16,7 +17,6 @@ out_path = BASE_ROOT / "2resampledNifti"
 save_zipped = True
 
 # Note: Output is NOT normalized - just resampled/cropped/masked
-# Use scripts 201-204 for different normalization techniques
 
 # Background values
 CT_BACKGROUND = -1024
@@ -24,24 +24,15 @@ MR_BACKGROUND = 0
 MASK_BACKGROUND = 0
 # ==========================
 
-# Normalization functions removed - see 201-204 standardization scripts
-
-
 def crop_pad_xy(arr: np.ndarray,
                 body_part: str,
                 background: float,
-                current_spacing: tuple,
-                return_new_spacing=False,
-                filename=None
+                current_spacing: tuple
         ) -> np.ndarray:
-    bp = body_part.upper()
-
     # ---------------------------------------------
     #   Region-based target size BEFORE resampling
     # ---------------------------------------------
-    print(f"[START CROP/PAD] {filename}: bodyPart={bp} > background: {background} > current_spacing: {current_spacing}")
-
-    if bp in {"TH", "AB", "PELVIS"}:
+    if body_part.upper() in {"TH", "AB", "PELVIS"}:
         target_xy = 512
         need_downsample = True
     else:  # HN, BRAIN
@@ -116,18 +107,12 @@ def crop_pad_xy(arr: np.ndarray,
 
         arr = sitk.GetArrayFromImage(resample_img)
 
-        if return_new_spacing:
-            return arr, new_spacing
-        else:
-            return arr
+        return arr, new_spacing
 
     # ---------------------------------------------
     #   Return for HN/BRAIN (no resampling)
     # ---------------------------------------------
-    if return_new_spacing:
-        return arr, current_spacing
-
-    return arr
+    return arr, current_spacing
 
 
 def _compute_mask_bbox_xy(mask_arr: np.ndarray, margin: int = 0):
@@ -165,50 +150,13 @@ def _roi_crop_sitk(img: sitk.Image, x0: int, y0: int, w: int, h: int) -> sitk.Im
     return sitk.RegionOfInterest(img, size=size, index=index)
 
 
-def _resample_fit_xy(img: sitk.Image, target_xy: int, interpolator, background: float) -> sitk.Image:
-    """Resample X/Y to fit within target_xy keeping aspect ratio; keep Z unchanged.
-
-    Returns a new SimpleITK image with updated spacing reflecting the resampling.
-    """
-    size = img.GetSize()  # (x, y, z)
-    spacing = img.GetSpacing()
-
-    in_w, in_h, in_z = size[0], size[1], size[2]
-    if in_w == 0 or in_h == 0:
-        return img
-
-    scale = min(target_xy / in_w, target_xy / in_h)
-    new_w = max(1, int(round(in_w * scale)))
-    new_h = max(1, int(round(in_h * scale)))
-
-    out_size = [new_w, new_h, in_z]
-    out_spacing = (
-        spacing[0] * (in_w / new_w),
-        spacing[1] * (in_h / new_h),
-        spacing[2],
-    )
-
-    resampler = sitk.ResampleImageFilter()
-    resampler.SetSize(out_size)
-    resampler.SetOutputSpacing(out_spacing)
-    resampler.SetInterpolator(interpolator)
-    resampler.SetDefaultPixelValue(float(background))
-    resampler.SetOutputDirection(img.GetDirection())
-    resampler.SetOutputOrigin(img.GetOrigin())
-    return resampler.Execute(img)
-
-
-def crop_letterbox_to_mask(
+def crop_img_to_mask_bbox(
     img: sitk.Image,
     mask_img: sitk.Image,
     background: float,
     target_xy: int = 256,
-    modality: str = "CT",
 ):
-    """Crop to the mask XY bounding box, then resample strictly to target size (256x256).
-
-    Always performs strict resize to exactly (target_xy, target_xy) with linear interpolation for CT/MR
-    and nearest-neighbor for masks. No padding is used.
+    """Crop to the mask XY bounding box, then pad/crop to (256x256) (resampling by factor 2 if necessary).
 
     Returns:
         out_arr (np.ndarray z,y,x), out_spacing (tuple)
@@ -231,123 +179,69 @@ def crop_letterbox_to_mask(
     cropped_img = _roi_crop_sitk(img, x0, y0, w, h)
     cropped_mask = _roi_crop_sitk(mask_img, x0, y0, w, h)
 
-    interp_img = sitk.sitkLinear if modality.upper() in {"CT", "MR", "MRI"} else sitk.sitkLinear
-
-    # Resample directly to target size (256x256) ignoring aspect ratio
-    in_size = cropped_img.GetSize()
-    in_spacing = cropped_img.GetSpacing()
-    out_size = [int(target_xy), int(target_xy), int(in_size[2])]
-    out_spacing = (
-        in_spacing[0] * (in_size[0] / target_xy),
-        in_spacing[1] * (in_size[1] / target_xy),
-        in_spacing[2],
-    )
-
-    def resample_exact(img_in, interp, default_val):
-        r = sitk.ResampleImageFilter()
-        r.SetSize(out_size)
-        r.SetOutputSpacing(out_spacing)
-        r.SetInterpolator(interp)
-        r.SetDefaultPixelValue(float(default_val))
-        r.SetOutputDirection(img_in.GetDirection())
-        r.SetOutputOrigin(img_in.GetOrigin())
-        return r.Execute(img_in)
-
-    img_fit = resample_exact(cropped_img, interp_img, background)
-    mask_fit = resample_exact(cropped_mask, sitk.sitkNearestNeighbor, 0)
-
-    # Convert to arrays for padding
-    arr_img = sitk.GetArrayFromImage(img_fit)   # (z, y, x)
-    arr_mask = sitk.GetArrayFromImage(mask_fit)
-
-    # No letterboxing/padding: arrays are already target size
-
-    # Ensure binary mask
-    arr_mask = (arr_mask > 0.5).astype(np.uint8)
-
-    # Apply mask outside region
-    arr_img[arr_mask == 0] = background
-
-    # Spacing after resample stays from img_fit
-    new_spacing = img_fit.GetSpacing()
-    return arr_img, new_spacing
+    return cropped_img, cropped_mask
 
 
 def process_image(
     in_path: Path,
     out_path: Path,
     background: float,
-    is_label: bool = False,
     mask_path: Path = None,
+    save_mask: bool = False,
+    mask_out_path: Path = None,
 ):
     """
     Load NIfTI from in_path, center crop/pad x/y to TARGET_SIZE_XY,
     preserve spacing/origin/direction, and write to out_path.
-    
-    If mask_path is provided, apply mask to set background values.
-    
-    NOTE: This script does NOT normalize values - output retains original HU/intensity values.
-          Use scripts 201-204 for different normalization techniques.
     """
+    # load image and mask
     img = sitk.ReadImage(str(in_path))
-    arr = sitk.GetArrayFromImage(img)  # (z, y, x)
-    spacing = img.GetSpacing()
+    mask_img = sitk.ReadImage(str(mask_path))
 
     body_part = in_path.name.split("_")[0]
 
-    # Determine modality - check filename only, not full path
-    is_ct = "CT" in in_path.name.upper()
-    is_mr = "MR" in in_path.name.upper()
+    # crop image to bbox of mask (smallest possible X/Y space without cropping mask)
+    cropped_img, cropped_mask = crop_img_to_mask_bbox(
+        img,
+        mask_img,
+        background=background,
+        target_xy=TARGET_SIZE_XY,
+    )
 
-    # If a mask is provided, use mask-based crop + strict resize to 256
-    if mask_path is not None and Path(mask_path).exists() and not is_label:
-        mask_img = sitk.ReadImage(str(mask_path))
-        out_arr, new_spacing = crop_letterbox_to_mask(
-            img,
-            mask_img,
-            background=background,
-            target_xy=TARGET_SIZE_XY,
-            modality="CT" if is_ct else "MR",
-        )
-        arr_out = out_arr
-        print(f"  → Mask-bbox crop + strict-resize applied to {in_path.name}; output shape: {arr_out.shape}")
-    else:
-        # Fallback to legacy center crop/pad + (optional region downsample)
-        arr_out, new_spacing = crop_pad_xy(
-            arr,
-            body_part=body_part,
-            background=background,
-            current_spacing=spacing,
-            return_new_spacing=True,
-            filename=in_path.name,
-        )
-        # If mask exists even in fallback, blank outside mask
-        if mask_path is not None and Path(mask_path).exists():
-            mask_img = sitk.ReadImage(str(mask_path))
-            mask_arr = sitk.GetArrayFromImage(mask_img)
-            mask_out, _ = crop_pad_xy(
-                mask_arr,
-                body_part=body_part,
-                background=0,
-                current_spacing=mask_img.GetSpacing(),
-                return_new_spacing=True,
-                filename=mask_path.name,
-            )
-            if is_ct:
-                arr_out[mask_out == 0] = -1024
-            elif is_mr:
-                arr_out[mask_out == 0] = 0
+    # bring to correct final output size by padding and then cropping
+    arr_img, new_spacing = crop_pad_xy(
+        sitk.GetArrayFromImage(cropped_img),
+        body_part=body_part,
+        background=background,
+        current_spacing=cropped_img.GetSpacing()
+    )
 
-    out_img = sitk.GetImageFromArray(arr_out)
+    arr_mask, _ = crop_pad_xy(
+        sitk.GetArrayFromImage(cropped_mask),
+        body_part=body_part,
+        background=0,
+        current_spacing=cropped_mask.GetSpacing()
+    )
+
+    # Apply mask outside region
+    arr_img[arr_mask == 0] = background
+
+    # save output image
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_img = sitk.GetImageFromArray(arr_img)
     out_img.SetSpacing(new_spacing)
     out_img.SetDirection(img.GetDirection())
     out_img.SetOrigin(img.GetOrigin())
-
-    if is_label:
-        out_img = sitk.Cast(out_img, sitk.sitkUInt8)
-
-    out_path.parent.mkdir(parents=True, exist_ok=True)
     sitk.WriteImage(out_img, str(out_path), useCompression=save_zipped)
+
+    if save_mask and mask_out_path:
+        mask_out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_mask = sitk.GetImageFromArray(arr_mask)
+        out_mask.SetSpacing(new_spacing)
+        out_mask.SetDirection(img.GetDirection())
+        out_mask.SetOrigin(img.GetOrigin())
+        out_mask = sitk.Cast(out_mask, sitk.sitkUInt8) # only for mask, not for 
+        sitk.WriteImage(out_mask, str(mask_out_path), useCompression=save_zipped)
 
 
 def get_first_nifti(folder: Path):
@@ -385,18 +279,18 @@ def process_case(case_dir: Path, out_root: Path):
       case_dir/
         CT_reg/*.nii.gz
         MR/*.nii.gz
-        masks/*.nii.gz   (optional)
+        new_masks/*.nii.gz   (optional)
 
     Output:
       out_root/case_id/CT_reg/<ct_name>_cp256.nii[.gz]
       out_root/case_id/MR/<mr_name>_cp256.nii[.gz]
-      out_root/case_id/masks/<mask_name>_cp256.nii[.gz]
+      out_root/case_id/new_masks/<mask_name>_cp256.nii[.gz]
     """
     case_id = case_dir.name
 
     ct_in = get_first_nifti(case_dir / "CT_reg")
     mr_in = get_first_nifti(case_dir / "MR")
-    mask_in = get_first_nifti(case_dir / "masks")
+    mask_in = get_first_nifti(case_dir / "new_masks")
 
     if ct_in is None or mr_in is None:
         print(f"[SKIP] {case_id}: missing CT_reg or MR")
@@ -406,31 +300,18 @@ def process_case(case_dir: Path, out_root: Path):
 
     ct_out = out_case / "CT_reg" / make_out_name(ct_in)
     mr_out = out_case / "MR" / make_out_name(mr_in)
+    mask_out = out_case / "new_masks" / make_out_name(mask_in)
 
     # Process CT and MR with mask applied (if available)
-    process_image(ct_in, ct_out, CT_BACKGROUND, is_label=False, mask_path=mask_in)
-    process_image(mr_in, mr_out, MR_BACKGROUND, is_label=False, mask_path=mask_in)
-
-    # Process mask itself (without applying mask to mask)
-    if mask_in is not None:
-        mask_out = out_case / "masks" / make_out_name(mask_in)
-        process_image(mask_in, mask_out, MASK_BACKGROUND, is_label=True, mask_path=None)
-
-    print(f"[OK] {case_id}")
+    process_image(ct_in, ct_out, CT_BACKGROUND, mask_path=mask_in, save_mask=False)
+    process_image(mr_in, mr_out, MR_BACKGROUND, mask_path=mask_in, save_mask=True, mask_out_path=mask_out)
 
 
 def main():
-    count = 0
-    total = sum(1 for d in src_root.iterdir() if d.is_dir())
-
-    for case_dir in sorted(src_root.iterdir()):
+    print("Starting resampling...")
+    for case_dir in tqdm(sorted(src_root.iterdir())):
         if case_dir.is_dir():
             process_case(case_dir, out_path)
-            count += 1
-
-            if count % 25 == 0:
-                print(f"Processed {count}/{total} items…")
-        
 
 
 if __name__ == "__main__":
