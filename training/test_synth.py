@@ -62,7 +62,7 @@ from tqdm import tqdm
 # ---- body mask config ----
 use_mask = True  # set True to use masks when computing metrics
 mask_slice_base_dir = os.path.join(
-    "/local/scratch/datasets/FullbodySCT/flavian_subset/5slices_31baseline/masks"
+    "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/5slices_31baseline/masks"
 )
 
 
