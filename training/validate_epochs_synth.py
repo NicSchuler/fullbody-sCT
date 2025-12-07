@@ -18,8 +18,8 @@ CUDA_VISIBLE_DEVICES=7 python validate_epochs_synth.py \
   # Validate a single epoch on subset val set
 CUDA_VISIBLE_DEVICES=7 python validate_epochs_synth.py \
   --phase val \
-  --dataroot /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/7materialized_splits_31baselineBodyRegion/AB/pix2pix/AB \
-  --name pix2pix_synthrad_abdomen \
+  --dataroot /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/7materialized_splits_31baselineBodyRegion/pelvis/pix2pix/AB \
+  --name pix2pix_synthrad_pelvis \
   --checkpoints_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/8checkpoints \
   --model pix2pix \
   --direction AtoB \
