@@ -6,6 +6,8 @@ MRI: Per-file p99 normalization (current technique used in training)
 
 This is the technique currently being used - per-image adaptive normalization
 for MRI using 99th percentile of foreground voxels.
+
+Note: This script processes ABDOMEN data only (AB_* prefix).
 """
 
 import numpy as np
@@ -19,7 +21,7 @@ from pathlib import Path
 BASE_ROOT = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed")
 
 src_root = BASE_ROOT / "2resampledNifti"  # Input: resampled but not normalized
-out_root = BASE_ROOT / "3normalized_32p99"  # Output: normalized
+out_root = BASE_ROOT / "32p99" / "3normalized"  # Output: normalized
 
 save_zipped = True
 # ==========================
@@ -123,22 +125,27 @@ def process_case(case_dir: Path, out_root: Path):
 
 def main():
     count = 0
-    total = sum(1 for d in src_root.iterdir() if d.is_dir())
+    
+    # Filter for abdomen only (AB_* prefix)
+    all_dirs = [d for d in src_root.iterdir() if d.is_dir()]
+    case_dirs = [d for d in all_dirs if d.name.startswith("AB_")]
+    total = len(case_dirs)
     
     print(f"Starting 32 Per-File P99 Standardization")
     print(f"Input:  {src_root}")
     print(f"Output: {out_root}")
+    print(f"Filter: Abdomen only (AB_*)")
+    print(f"Cases:  {total} abdomen cases")
     print(f"CT:  [-1024, 1200] HU → [0, 1]")
     print(f"MRI: Per-file p99 normalization → [0, 1]")
     print("-" * 60)
     
-    for case_dir in sorted(src_root.iterdir()):
-        if case_dir.is_dir():
-            process_case(case_dir, out_root)
-            count += 1
-            
-            if count % 25 == 0:
-                print(f"Processed {count}/{total} cases...")
+    for case_dir in sorted(case_dirs):
+        process_case(case_dir, out_root)
+        count += 1
+        
+        if count % 25 == 0:
+            print(f"Processed {count}/{total} cases...")
     
     print(f"\nCompleted: {count}/{total} cases processed")
 

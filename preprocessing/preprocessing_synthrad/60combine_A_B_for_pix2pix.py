@@ -40,7 +40,7 @@ def configure_paths(method: str):
             f"Valid options: {valid_methods}"
         )
     
-    ROOT = BASE_ROOT / f"6materialized_splits_{method}" / "pix2pix"
+    ROOT = BASE_ROOT / method / "6materialized_splits" / "pix2pix"
     
     if not ROOT.exists():
         raise FileNotFoundError(

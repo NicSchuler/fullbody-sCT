@@ -13,8 +13,8 @@ Examples:
 If no argument is provided, uses default: 32p99 (per-file p99)
 
 This will:
-    - Read from: 3normalized_{method}/
-    - Write to:  5slices_{method}/
+    - Read from: {method}/3normalized/
+    - Write to:  {method}/5slices/
 """
 
 import os
@@ -253,12 +253,12 @@ def configure_paths(method: str):
         )
     
     # Input: normalized data from 31-34 scripts
-    CT_ROOT = os.path.join(BASE_ROOT, f"3normalized_{method}")
-    MR_ROOT = os.path.join(BASE_ROOT, f"3normalized_{method}")
-    SLICE_ROOT = os.path.join(BASE_ROOT, f"3normalized_{method}")
+    CT_ROOT = os.path.join(BASE_ROOT, method, "3normalized")
+    MR_ROOT = os.path.join(BASE_ROOT, method, "3normalized")
+    SLICE_ROOT = os.path.join(BASE_ROOT, method, "3normalized")
     
     # Output: slices with matching suffix
-    OUT_ROOT = os.path.join(BASE_ROOT, f"5slices_{method}")
+    OUT_ROOT = os.path.join(BASE_ROOT, method, "5slices")
     
     # Verify input directories exist
     if not os.path.exists(CT_ROOT):

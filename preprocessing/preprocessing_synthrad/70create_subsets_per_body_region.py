@@ -27,7 +27,7 @@ def configure_paths(method: str):
             f"Valid options: {valid_methods}"
         )
     
-    ROOT = str(BASE_ROOT / f"6materialized_splits_{method}")
+    ROOT = str(BASE_ROOT / method / "6materialized_splits")
     
     if not os.path.exists(ROOT):
         raise FileNotFoundError(
@@ -49,23 +49,8 @@ def configure_paths(method: str):
 
 
 def get_new_root_name(current_root_name: str) -> str:
-    """Extract leading integer, add 1, keep rest, append 'BodyRegion'."""
-    digits = ""
-    for ch in current_root_name:
-        if ch.isdigit():
-            digits += ch
-        else:
-            break
-
-    if not digits:
-        raise ValueError(
-            f"Root directory name '{current_root_name}' does not start with a number."
-        )
-
-    num = int(digits)
-    rest = current_root_name[len(digits):]  # e.g. 'materialized_splitsNonNormalized'
-    new_num = num + 1
-    return f"{new_num}{rest}BodyRegion"
+    """Return '7materialized_splits_BodyRegion' for standardized naming."""
+    return "7materialized_splits_BodyRegion"
 
 
 def copy_by_body_region(original_root: str, new_root: str, rel_path: str):

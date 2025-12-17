@@ -15,7 +15,7 @@ Examples:
 This script:
     1. Reads fake_B prediction slices (PNG format) from <result_dir>/test_latest/images/
     2. Groups slices by patient ID
-    3. Looks up original metadata (affine, spacing) from 5slices_{method} directory
+    3. Looks up original metadata (affine, spacing) from {method}/5slices directory
     4. Reconstructs 3D volumes by stacking slices in order
     5. Saves as NIfTI to <result_dir>/test_latest/volumes/
 """
@@ -183,7 +183,7 @@ def main():
     # Paths
     images_dir = result_dir / "test_latest" / "images"
     output_dir = result_dir / "test_latest" / "volumes"
-    reference_dir = Path(BASE_ROOT) / f"5slices_{norm_method}" / "pix2pix_2d" / "full" / "B"
+    reference_dir = Path(BASE_ROOT) / norm_method / "5slices" / "pix2pix_2d" / "full" / "B"
     
     # Validate input
     if not images_dir.exists():

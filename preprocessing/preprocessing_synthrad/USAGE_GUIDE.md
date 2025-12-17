@@ -9,25 +9,25 @@
 python 20resampling.py
 # Output: 2resampledNifti/
 
-# Step 2: Apply normalization
+# Step 2: Apply normalization (Abdomen only)
 python 32perfile_p99_standardization.py
-# Output: 3normalized_32p99/
+# Output: 32p99/3normalized/ (Abdomen cases only)
 
 # Step 3: Create 2D slices
 python 40slice_creator.py 32p99
-# Output: 5slices_32p99/
+# Output: 32p99/5slices/
 
 # Step 4: Split into train/val/test
 python 50_split_folderstructure.py 32p99
-# Output: 6materialized_splits_32p99/
+# Output: 32p99/6materialized_splits/
 
 # Step 5: Create A+B combined images for pix2pix
 python 60combine_A_B_for_pix2pix.py 32p99
-# Output: 6materialized_splits_32p99/pix2pix/AB/
+# Output: 32p99/6materialized_splits/pix2pix/AB/
 
 # Step 6: Create body-region subsets
 python 70create_subsets_per_body_region.py 32p99
-# Output: 7materialized_splits_32p99BodyRegion/
+# Output: 32p99/7materialized_splits_BodyRegion/
 ```
 
 ## Running for All Normalization Methods
@@ -64,10 +64,14 @@ done
 
 ### 31-34: Standardization Scripts
 ```bash
-python 31baseline_standardization.py
-python 32perfile_p99_standardization.py
-bash 33nyul_run.sh  # Note: shell script
-python 34npeaks_standardization.py
+# 31baseline: supports --all-data flag for all body regions
+python 31baseline_standardization.py              # Abdomen only (default)
+python 31baseline_standardization.py --all-data   # All body regions
+
+# 32p99, 33nyul, 34npeaks: process ABDOMEN only (AB_* prefix)
+python 32perfile_p99_standardization.py  # Abdomen only
+bash 33nyul_run.sh  # Note: shell script - Abdomen only
+python 34npeaks_standardization.py  # Abdomen only
 ```
 
 ### 40: Slice Creator
@@ -89,8 +93,8 @@ python 50_split_folderstructure.py 34npeaks
 
 # Or with manual path override:
 python 50_split_folderstructure.py \
-    --slices-root /path/to/5slices_32p99 \
-    --out-dir /path/to/6materialized_splits_32p99
+    --slices-root /path/to/32p99/5slices \
+    --out-dir /path/to/32p99/6materialized_splits
 ```
 
 ### 60: Combine A+B for Pix2Pix
@@ -120,43 +124,49 @@ Synthrad_combined_preprocessed/
 ├── 1initNifti/                              # Raw data
 ├── 2resampledNifti/                         # Resampled (not normalized)
 │
-├── 3normalized_31baseline/                  # Normalized data
-├── 3normalized_32p99/
-├── 3normalized_33nyul/
-├── 3normalized_34npeaks/
+├── 31baseline/                              # Baseline normalization outputs
+│   ├── 3normalized/                         # Normalized data
+│   ├── 5slices/                             # 2D slices
+│   ├── 6materialized_splits/                # Train/val/test splits
+│   │   ├── pix2pix/
+│   │   │   ├── train/{A,B}
+│   │   │   ├── val/{A,B}
+│   │   │   ├── test/{A,B}
+│   │   │   └── AB/{train,val,test}          # Combined A+B images
+│   │   └── cyclegan/
+│   │       ├── train/{trainA,trainB}
+│   │       ├── val/{valA,valB}
+│   │       └── test/{testA,testB}
+│   └── 7materialized_splits_BodyRegion/     # Body region subsets
+│       ├── AB/  (abdomen)
+│       ├── HN/  (head & neck)
+│       ├── TH/  (thorax)
+│       └── ...
 │
-├── 5slices_31baseline/                      # 2D slices
-├── 5slices_32p99/
-├── 5slices_33nyul/
-├── 5slices_34npeaks/
+├── 32p99/                                   # P99 normalization outputs
+│   ├── 3normalized/
+│   ├── 5slices/
+│   ├── 6materialized_splits/
+│   └── 7materialized_splits_BodyRegion/
 │
-├── 6materialized_splits_31baseline/         # Train/val/test splits
-├── 6materialized_splits_32p99/
-│   ├── pix2pix/
-│   │   ├── train/{A,B}
-│   │   ├── val/{A,B}
-│   │   ├── test/{A,B}
-│   │   └── AB/{train,val,test}              # Combined A+B images
-│   └── cyclegan/
-│       ├── train/{trainA,trainB}
-│       ├── val/{valA,valB}
-│       └── test/{testA,testB}
-├── 6materialized_splits_33nyul/
-├── 6materialized_splits_34npeaks/
+├── 33nyul/                                  # Nyul normalization outputs
+│   ├── 3normalized/
+│   ├── 5slices/
+│   ├── 6materialized_splits/
+│   └── 7materialized_splits_BodyRegion/
 │
-├── 7materialized_splits_31baselineBodyRegion/  # Body region subsets
-├── 7materialized_splits_32p99BodyRegion/
-│   ├── AB/  (abdomen)
-│   ├── HN/  (head & neck)
-│   ├── TH/  (thorax)
-│   └── ...
-├── 7materialized_splits_33nyulBodyRegion/
-└── 7materialized_splits_34npeaksBodyRegion/
+└── 34npeaks/                                # N-peaks normalization outputs
+    ├── 3normalized/
+    ├── 5slices/
+    ├── 6materialized_splits/
+    └── 7materialized_splits_BodyRegion/
 ```
 
 ## Notes
 
 - **Default method**: If you don't specify a method, scripts default to `32p99`
+- **Abdomen filtering**: All normalization methods (32p99, 33nyul, 34npeaks) process **abdomen data only** (AB_* prefix)
+  - Exception: `31baseline` has `--all-data` flag to process all body regions
 - **Run once**: `20resampling.py` only needs to be run once
 - **Parallel processing**: Different normalization methods can be run in parallel
 - **Method validation**: Scripts will validate that the normalization method is valid

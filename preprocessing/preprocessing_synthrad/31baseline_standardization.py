@@ -5,8 +5,13 @@ CT: Min-max normalization using fixed HU window [-1024, 1200] → [0, 1]
 MRI: Min-max normalization clipping at 2000, then scale to [0, 1]
 
 This is a simple baseline approach using fixed thresholds.
+
+Usage:
+    python 31baseline_standardization.py              # Abdomen only (default)
+    python 31baseline_standardization.py --all-data   # All body regions
 """
 
+import sys
 import numpy as np
 import SimpleITK as sitk
 from pathlib import Path
@@ -18,7 +23,7 @@ from pathlib import Path
 BASE_ROOT = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed")
 
 src_root = BASE_ROOT / "2resampledNifti"  # Input: resampled but not normalized
-out_root = BASE_ROOT / "3normalized_31baseline"  # Output: normalized
+out_root = BASE_ROOT / "31baseline" / "3normalized"  # Output: normalized
 
 save_zipped = True
 # ==========================
@@ -110,23 +115,38 @@ def process_case(case_dir: Path, out_root: Path):
 
 
 def main():
+    # Parse command-line arguments
+    abdomen_only = True  # Default to abdomen only
+    if len(sys.argv) > 1 and sys.argv[1] == "--all-data":
+        abdomen_only = False
+    
     count = 0
-    total = sum(1 for d in src_root.iterdir() if d.is_dir())
+    all_dirs = [d for d in src_root.iterdir() if d.is_dir()]
+    
+    # Filter for abdomen only if requested
+    if abdomen_only:
+        case_dirs = [d for d in all_dirs if d.name.startswith("AB_")]
+        filter_msg = "Abdomen only (AB_*)"
+    else:
+        case_dirs = all_dirs
+        filter_msg = "All body regions"
+    
+    total = len(case_dirs)
     
     print(f"Starting 31 Baseline Standardization")
     print(f"Input:  {src_root}")
     print(f"Output: {out_root}")
+    print(f"Filter: {filter_msg}")
     print(f"CT:  [-1024, 1200] HU → [0, 1]")
     print(f"MRI: [0, 2000] → [0, 1]")
     print("-" * 60)
     
-    for case_dir in sorted(src_root.iterdir()):
-        if case_dir.is_dir():
-            process_case(case_dir, out_root)
-            count += 1
-            
-            if count % 25 == 0:
-                print(f"Processed {count}/{total} cases...")
+    for case_dir in sorted(case_dirs):
+        process_case(case_dir, out_root)
+        count += 1
+        
+        if count % 25 == 0:
+            print(f"Processed {count}/{total} cases...")
     
     print(f"\nCompleted: {count}/{total} cases processed")
 

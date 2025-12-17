@@ -4,7 +4,7 @@ from tqdm import tqdm
 
 # === USER CONFIGURATION ===
 source_root = "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed"       # e.g. "/data/A"
-subdir_name = "5slices_31baseline"                                # e.g. "1initNifti"
+subdir_name = "31baseline/5slices"                                # e.g. "1initNifti" or "31baseline/5slices"
 destination_root = "/local/scratch/datasets/FullbodySCT/flavian_subset"     # e.g. "/data/filtered"
 patient_ids = ["1ABA005", "1ABA009", "1ABA042", "1ABA063", "1ABA073", "1ABA087", "1ABA108", "1ABA119", "1ABB035", "1ABB056", "1ABB112"]     # define your patient numbers here
 valid_extensions = [".nii", ".nii.gz"]  

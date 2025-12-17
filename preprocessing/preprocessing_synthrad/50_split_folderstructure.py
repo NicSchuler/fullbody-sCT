@@ -27,8 +27,8 @@ Usage:
 
     # Or override paths manually:
     python 50_split_folderstructure.py \
-        --slices-root /.../5slices_32p99 \
-        --out-dir     /.../6materialized_splits_32p99 \
+        --slices-root /.../32p99/5slices \
+        --out-dir     /.../32p99/6materialized_splits \
         --modes both --include-ext .nii
 
 Notes:
@@ -190,9 +190,9 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     
     # Auto-configure paths based on normalization method if not explicitly provided
     if args.slices_root is None:
-        args.slices_root = str(DEFAULT_BASE / f"5slices_{args.normalization_method}")
+        args.slices_root = str(DEFAULT_BASE / args.normalization_method / "5slices")
     if args.out_dir is None:
-        args.out_dir = str(DEFAULT_BASE / f"6materialized_splits_{args.normalization_method}")
+        args.out_dir = str(DEFAULT_BASE / args.normalization_method / "6materialized_splits")
     
     return args
 
