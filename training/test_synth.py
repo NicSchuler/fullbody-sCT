@@ -184,14 +184,18 @@ if __name__ == '__main__':
 
         if i % 1000 == 0:  # save images to an HTML file
             print('processing (%04d)-th image... %s' % (i, img_path))
-        save_images(webpage, visuals, img_path, width=opt.display_winsize)
-        webpage.save()  # save the HTML
-
+        
+        if opt.save_results:
+            save_images(webpage, visuals, img_path, width=opt.display_winsize)
+            webpage.save()  # save the HTML
 
     print("Results for test split, mean:")
     df = pd.DataFrame([
         pd.DataFrame(res_test, columns=['MAE', "MSE","PSNR", 'SSIM']).mean().squeeze()
     ], index=[ 'Test set']).T
+
+
+    pd.DataFrame(res_test, columns=['MAE', "MSE","PSNR", 'SSIM']).to_csv(os.path.join(opt.results_dir, opt.name, "test_metrics_over_all.csv"))
 
     print(df)
 

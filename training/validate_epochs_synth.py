@@ -30,10 +30,10 @@ CUDA_VISIBLE_DEVICES=7 python validate_epochs_synth.py \
   --num_test 50
 
 # Validate ALL saved epochs on a random subset of 100 val images
-CUDA_VISIBLE_DEVICES=7 python validate_epochs_synth.py \
+CUDA_VISIBLE_DEVICES=5 python validate_epochs_synth.py \
   --phase val \
-  --dataroot /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/7materialized_splitsNonNormalizedBodyRegion/AB/pix2pix/AB \
-  --name pix2pix_synthrad_abdomen \
+  --dataroot /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/6materialized_splits_31baseline/pix2pix/AB \
+  --name pix2pix_synthrad_allregions \
   --checkpoints_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/8checkpoints \
   --model pix2pix \
   --direction AtoB \
@@ -41,7 +41,7 @@ CUDA_VISIBLE_DEVICES=7 python validate_epochs_synth.py \
   --output_nc 1 \
   --results_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/100results \
   --epoch all \
-  --num_test 100
+  --num_test 1000
 """
 
 import os
