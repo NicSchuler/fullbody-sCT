@@ -164,7 +164,7 @@ if __name__ == '__main__':
         psnr = peak_signal_to_noise_ratio(real_ct_numpy, fake_ct_numpy, mask)
         ssim = structural_similarity_index(real_ct_numpy, fake_ct_numpy)
 
-        res_test.append([mae, mse, psnr,  ssim])
+        res_test.append([file_name, mae, mse, psnr,  ssim])
 
 
         #save dicoms and niftis
@@ -191,17 +191,17 @@ if __name__ == '__main__':
 
     print("Results for test split, mean:")
     df = pd.DataFrame([
-        pd.DataFrame(res_test, columns=['MAE', "MSE","PSNR", 'SSIM']).mean().squeeze()
+        pd.DataFrame(res_test, columns=['file_name', 'MAE', "MSE","PSNR", 'SSIM']).drop(columns=["file_name"]).mean().squeeze()
     ], index=[ 'Test set']).T
 
 
-    pd.DataFrame(res_test, columns=['MAE', "MSE","PSNR", 'SSIM']).to_csv(os.path.join(opt.results_dir, opt.name, "test_metrics_over_all.csv"))
+    pd.DataFrame(res_test, columns=['file_name', 'MAE', "MSE","PSNR", 'SSIM']).to_csv(os.path.join(opt.results_dir, opt.name, "test_metrics_over_all.csv"))
 
     print(df)
 
     print("Results for test split, standard deviation:")
     st_d_df = pd.DataFrame([
-        pd.DataFrame(res_test, columns=['MAE', "MSE","PSNR", 'SSIM']).std().squeeze()
+        pd.DataFrame(res_test, columns=['file_name', 'MAE', "MSE","PSNR", 'SSIM']).drop(columns=["file_name"]).std().squeeze()
     ], index=[ 'Test set']).T
 
     print(st_d_df)

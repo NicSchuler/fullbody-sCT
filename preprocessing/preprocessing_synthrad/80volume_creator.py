@@ -13,12 +13,12 @@ Examples:
     python 80volume_creator.py cyclegan_brain
 
 This script:
-    1. Reads NIfTI slices from 9latestTestImages/<model_region>/fake_nifti/ and real_nifti/
+    1. Reads NIfTI slices from 9latestTestImages/<model_region>/fake_nifti/
     2. Groups slices by patient ID
     3. Gets original metadata (affine, spacing) from 2resampledNifti/<patient_id>/CT_reg/
     4. Reconstructs 3D volumes by stacking slices in order
     5. Saves reconstructed volumes to 9latestTestImages/<model_region>/reconstruction/<patient_id>/
-    6. Copies original CT volume to the patient reconstruction folder for comparison
+    6. Copies original CT and MR volumes to the patient reconstruction folder for comparison
 """
 
 import os
@@ -67,7 +67,7 @@ def parse_nifti_slice_filename(filename: str):
 def find_original_ct(patient_id: str) -> Path:
     """
     Find the original CT volume in 2resampledNifti.
-    
+
     Searches for: 2resampledNifti/{patient_id}/CT_reg/*.nii.gz
     """
     ct_dir = RESAMPLED_DIR / patient_id / "CT_reg"
@@ -78,15 +78,33 @@ def find_original_ct(patient_id: str) -> Path:
     return None
 
 
+def find_original_mr(patient_id: str) -> Path:
+    """
+    Find the original MR volume in 2resampledNifti.
+
+    Searches for: 2resampledNifti/{patient_id}/MR/*.nii.gz
+    """
+    mr_dir = RESAMPLED_DIR / patient_id / "MR"
+    if mr_dir.exists():
+        for f in mr_dir.iterdir():
+            if f.suffix == '.gz' or f.suffix == '.nii':
+                return f
+    return None
+
+
 def load_nifti_slice(nifti_path: Path) -> tuple:
     """
     Load a 2D NIfTI slice and return the data array and header info.
-    
+
+    Applies inverse transformations to undo the rotation and flip from test_synth.py:
+    - Slices were saved with: np.rot90(data, -1) followed by np.fliplr(data)
+    - We undo these with: np.fliplr followed by np.rot90(data, 1)
+
     Returns: (array, affine, header)
     """
     img = nib.load(nifti_path)
     data = img.get_fdata().astype(np.float32)
-    
+
     # Handle 3D images with single slice dimension
     if data.ndim == 3:
         # Squeeze out singleton dimensions
@@ -96,7 +114,13 @@ def load_nifti_slice(nifti_path: Path) -> tuple:
             data = data[0, :, :]
         elif data.shape[1] == 1:
             data = data[:, 0, :]
-    
+
+    # Undo the transformations applied in test_synth.py
+    # Original: np.fliplr(np.rot90(data, -1))
+    # Inverse: np.rot90(np.fliplr(data), 1)
+    data = np.fliplr(data)
+    data = np.rot90(data, 1)
+
     return data, img.affine, img.header
 
 
@@ -174,46 +198,53 @@ def reconstruct_volume_from_nifti(
 def process_patient(
     patient_id: str,
     fake_slices: dict,
-    real_slices: dict,
     fake_dir: Path,
-    real_dir: Path,
     output_dir: Path
 ) -> bool:
     """
-    Process one patient: reconstruct fake and real volumes, copy original CT.
-    
+    Process one patient: reconstruct fake volume, copy original CT and MR.
+
     Args:
         patient_id: Patient identifier
         fake_slices: Dict of slice_num -> filename for fake slices
-        real_slices: Dict of slice_num -> filename for real slices
         fake_dir: Directory containing fake NIfTI slices
-        real_dir: Directory containing real NIfTI slices
         output_dir: Base output directory for reconstructions
-    
+
     Returns:
         True if successful, False otherwise
     """
     patient_out_dir = output_dir / patient_id
     patient_out_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Find and load original CT for reference affine
     original_ct_path = find_original_ct(patient_id)
     reference_affine = None
-    
+
     if original_ct_path:
         try:
             original_img = nib.load(original_ct_path)
             reference_affine = original_img.affine
-            
+
             # Copy original CT to output folder
             dest_ct_path = patient_out_dir / f"{patient_id}_original_CT.nii.gz"
             if not dest_ct_path.exists():
                 shutil.copy2(original_ct_path, dest_ct_path)
         except Exception as e:
             print(f"  !WARNING! Could not load original CT for {patient_id}: {e}")
-    
+
+    # Find and copy original MR
+    original_mr_path = find_original_mr(patient_id)
+    if original_mr_path:
+        try:
+            # Copy original MR to output folder
+            dest_mr_path = patient_out_dir / f"{patient_id}_original_MR.nii.gz"
+            if not dest_mr_path.exists():
+                shutil.copy2(original_mr_path, dest_mr_path)
+        except Exception as e:
+            print(f"  !WARNING! Could not copy original MR for {patient_id}: {e}")
+
     success = True
-    
+
     # Reconstruct fake (synthetic) volume
     if fake_slices:
         fake_output = patient_out_dir / f"{patient_id}_synthetic_CT.nii.gz"
@@ -222,16 +253,7 @@ def process_patient(
         )
         if result is None:
             success = False
-    
-    # Reconstruct real (input) volume
-    if real_slices:
-        real_output = patient_out_dir / f"{patient_id}_real_input.nii.gz"
-        result = reconstruct_volume_from_nifti(
-            patient_id, real_slices, real_dir, real_output, reference_affine
-        )
-        if result is None:
-            success = False
-    
+
     return success
 
 
@@ -251,39 +273,34 @@ def main():
         sys.exit(1)
     
     model_region = sys.argv[1]
-    
+
     # Paths
     model_dir = TEST_IMAGES_DIR / model_region
     fake_dir = model_dir / "fake_nifti"
-    real_dir = model_dir / "real_nifti"
     output_dir = model_dir / "reconstruction"
-    
+
     # Validate input
     if not model_dir.exists():
         print(f"ERROR: Model/region directory not found: {model_dir}")
         sys.exit(1)
-    
+
     if not fake_dir.exists():
         print(f"ERROR: fake_nifti directory not found: {fake_dir}")
         sys.exit(1)
-    
-    has_real = real_dir.exists()
-    
+
     print("=" * 70)
     print("Volume Reconstruction from NIfTI Slices")
     print("=" * 70)
-    print(f"Model/Region:    {model_region}")
-    print(f"Fake slices:     {fake_dir}")
-    print(f"Real slices:     {real_dir} {'✓' if has_real else '(not found)'}")
-    print(f"Original CTs:    {RESAMPLED_DIR}")
-    print(f"Output:          {output_dir}")
+    print(f"Model/Region:      {model_region}")
+    print(f"Fake slices:       {fake_dir}")
+    print(f"Original CT/MR:    {RESAMPLED_DIR}")
+    print(f"Output:            {output_dir}")
     print("=" * 70)
     print()
     
     # Scan for NIfTI slices
     fake_slices = defaultdict(dict)  # patient_id -> {slice_num: filename}
-    real_slices = defaultdict(dict)
-    
+
     # Process fake slices
     for filepath in sorted(fake_dir.glob("*.nii*")):
         parsed = parse_nifti_slice_filename(filepath.name)
@@ -291,39 +308,26 @@ def main():
             continue
         patient_id, slice_num = parsed
         fake_slices[patient_id][slice_num] = filepath.name
-    
-    # Process real slices if available
-    if has_real:
-        for filepath in sorted(real_dir.glob("*.nii*")):
-            parsed = parse_nifti_slice_filename(filepath.name)
-            if parsed is None:
-                continue
-            patient_id, slice_num = parsed
-            real_slices[patient_id][slice_num] = filepath.name
-    
+
     if not fake_slices:
         print("ERROR: No NIfTI slices found in fake_nifti!")
         print("Expected filename format: AB_1ABC123_42.nii")
         sys.exit(1)
-    
+
     # Get all unique patient IDs
-    all_patients = set(fake_slices.keys()) | set(real_slices.keys())
-    
+    all_patients = set(fake_slices.keys())
+
     print(f"Found {len(all_patients)} patients")
     print(f"  - Fake slices: {sum(len(v) for v in fake_slices.values())} total")
-    if has_real:
-        print(f"  - Real slices: {sum(len(v) for v in real_slices.values())} total")
     print()
-    
+
     # Process each patient
     success_count = 0
     for patient_id in tqdm(sorted(all_patients), desc="Reconstructing volumes"):
         success = process_patient(
             patient_id,
             fake_slices.get(patient_id, {}),
-            real_slices.get(patient_id, {}),
             fake_dir,
-            real_dir,
             output_dir
         )
         if success:
@@ -337,9 +341,8 @@ def main():
     print()
     print("Each patient folder contains:")
     print("  - {patient}_synthetic_CT.nii.gz  (reconstructed from fake slices)")
-    if has_real:
-        print("  - {patient}_real_input.nii.gz    (reconstructed from real slices)")
-    print("  - {patient}_original_CT.nii.gz   (copied from 2resampledNifti)")
+    print("  - {patient}_original_CT.nii.gz   (copied from 2resampledNifti/CT_reg)")
+    print("  - {patient}_original_MR.nii.gz   (copied from 2resampledNifti/MR)")
     print("=" * 70)
 
 
