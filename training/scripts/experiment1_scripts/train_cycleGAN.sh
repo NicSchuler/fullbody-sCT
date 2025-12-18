@@ -55,3 +55,19 @@ CUDA_VISIBLE_DEVICES=2 python train.py --dataroot '/local/scratch/datasets/Fullb
 --batch_size 32 \
 --netG unet_256 \
 --netD basic
+
+
+
+
+
+
+CUDA_VISIBLE_DEVICES=7 python train.py --dataroot '/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/6materialized_splits_31baseline/cyclegan/train' \
+--checkpoints_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/8checkpoints \
+--name cyclegan_allregions \
+--model cycle_gan \
+--input_nc 1 \
+--output_nc 1 \
+--batch_size 24 \
+--netG unet_256 \
+--netD basic \
+--continue_train
