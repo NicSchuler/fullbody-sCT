@@ -69,10 +69,10 @@ CUDA_VISIBLE_DEVICES=0 python validate_epochs_synth.py \
   --epoch all
 
 
-  CUDA_VISIBLE_DEVICES=2 python validate_epochs_synth.py \
+  CUDA_VISIBLE_DEVICES=5 python validate_epochs_synth.py \
   --phase val \
-  --dataroot /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/6materialized_splits_31baseline/pix2pix/AB \
-  --name pix2pix_synthrad_allregions \
+  --dataroot /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/7materialized_splits_31baselineBodyRegion/AB/pix2pix/AB \
+  --name pix2pix_synthrad_abdomen_bs1 \
   --checkpoints_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/8checkpoints \
   --model pix2pix \
   --direction AtoB \
