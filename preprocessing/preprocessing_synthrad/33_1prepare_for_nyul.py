@@ -1,22 +1,25 @@
 """Stage MR + mask volumes for Nyul training and application.
 
-Input (resampled):
-    /.../2resampledNifti/<PATIENT_ID>/<MR_SUBDIR>/*.nii[.gz]
-    /.../2resampledNifti/<PATIENT_ID>/<MASK_SUBDIR>/*.nii[.gz]
-
-Outputs (Nyul-ready):
-    /.../3resampledNiftiNyulReady/trainingforcalc/{MR,masks}/<PATIENT>_*.nii[.gz]
-        - contains TRAIN only (used to fit Nyul)
-    /.../3resampledNiftiNyulReady/valtest/{MR,masks}/<PATIENT>_*.nii[.gz]
-        - contains VAL + TEST (to be normalized using train-fit mapping)
+Default experiment layout:
+    Input cases:
+        /.../experiment2/31baseline/3normalized/<PATIENT_ID>/{MR,new_masks}/*.nii.gz
+    Outputs (Nyul-ready):
+        /.../experiment2/33nyul/25NiftiNyulReady/trainingforcalc/{MR,masks}/<PATIENT>_*.nii.gz
+            - contains TRAIN only (used to fit Nyul)
+        /.../experiment2/33nyul/25NiftiNyulReady/valtest/{MR,masks}/<PATIENT>_*.nii.gz
+            - contains VAL + TEST (later normalized with train-fit mapping)
 
 Usage:
-    python 25prepare_for_nyul.py \
-        --base-root /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed \
-        --manifest   /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/splits_manifest.csv
+    python 33_1prepare_for_nyul.py \
+        --base-root     /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed \
+        --input-root    /local/.../experiment2/31baseline/3normalized \
+        --output-root   /local/.../experiment2/33nyul/25NiftiNyulReady \
+        --manifest      /local/.../splits_manifest.csv
 
 Optional:
-    --no-gzip        (write .nii instead of .nii.gz)
+    --mr-subdir MR_NAME         (default: MR)
+    --mask-subdir MASK_NAME     (default: new_masks)
+    --no-gzip                   (write .nii instead of .nii.gz)
 
 Manifest requirements:
     CSV with columns: split, patient_token
@@ -29,8 +32,10 @@ import csv
 import re
 from typing import Optional
 
-MR_SUBDIR = "MR"
-MASK_SUBDIR = "masks"
+from tqdm import tqdm
+
+DEFAULT_MR_SUBDIR = "MR"
+DEFAULT_MASK_SUBDIR = "new_masks"
 
 # Accept tokens like 1ABA005, 1HND012, 1BA123 even when prefixed in folder names
 RE_TOKEN = re.compile(r"1(?:AB|HN|TH|B|P)[A-D][0-9]{3}")
@@ -42,11 +47,17 @@ def extract_token(text: str) -> Optional[str]:
 
 
 DEFAULT_BASE = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed")
+DEFAULT_INPUT_ROOT = DEFAULT_BASE / "experiment2" / "31baseline" / "3normalized"
+DEFAULT_OUTPUT_ROOT = DEFAULT_BASE / "experiment2" / "33nyul" / "25NiftiNyulReady"
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description="Prepare MR + masks for Nyul: train-only fitting set + all-data set.")
-    p.add_argument("--base-root", default=str(DEFAULT_BASE), help="Pipeline base root containing 2resampledNifti")
+    p = argparse.ArgumentParser(description="Prepare MR + masks for Nyul: train-only fitting set + val/test application set.")
+    p.add_argument("--base-root", default=str(DEFAULT_BASE), help="Pipeline base root containing manifests")
+    p.add_argument("--input-root", default=str(DEFAULT_INPUT_ROOT), help="Case root that provides MR/mask folders")
+    p.add_argument("--output-root", default=str(DEFAULT_OUTPUT_ROOT), help="Destination root for Nyul-ready folders")
+    p.add_argument("--mr-subdir", default=DEFAULT_MR_SUBDIR, help="Name of MR subdirectory inside each case folder")
+    p.add_argument("--mask-subdir", default=DEFAULT_MASK_SUBDIR, help="Name of mask subdirectory inside each case folder")
     p.add_argument("--manifest", default=str(DEFAULT_BASE / "splits_manifest.csv"), help="CSV manifest with split,patient_token columns")
     p.add_argument("--no-gzip", action="store_true", help="Write .nii instead of .nii.gz")
     return p.parse_args()
@@ -76,10 +87,10 @@ def get_first_nifti(folder: Path):
     return None
 
 
-def prepare_case(case_dir: Path, out_root: Path, zipped: bool, out_token: Optional[str] = None):
+def prepare_case(case_dir: Path, out_root: Path, zipped: bool, mr_subdir: str, mask_subdir: Optional[str], out_token: Optional[str] = None):
     case_id = out_token or case_dir.name
-    mr_in = get_first_nifti(case_dir / MR_SUBDIR)
-    mask_in = get_first_nifti(case_dir / MASK_SUBDIR)
+    mr_in = get_first_nifti(case_dir / mr_subdir)
+    mask_in = get_first_nifti(case_dir / mask_subdir) if mask_subdir else None
     if mr_in is None:
         print(f"[SKIP] {case_id}: no MR found")
         return False
@@ -98,8 +109,8 @@ def prepare_case(case_dir: Path, out_root: Path, zipped: bool, out_token: Option
 def main():
     args = parse_args()
     base_root = Path(args.base_root)
-    in_path = base_root / "2resampledNifti"
-    out_base = base_root / "3resampledNiftiNyulReady"
+    in_path = Path(args.input_root)
+    out_base = Path(args.output_root)
     manifest = Path(args.manifest)
     if not in_path.exists():
         raise SystemExit(f"Input path missing: {in_path}")
@@ -117,17 +128,16 @@ def main():
     valtest_out = out_base / "valtest"
     staged_train = 0
     staged_valtest = 0
-    for case_dir in sorted(in_path.iterdir()):
-        if not case_dir.is_dir():
-            continue
+    case_dirs = sorted(d for d in in_path.iterdir() if d.is_dir())
+    for case_dir in tqdm(case_dirs, desc="Staging cases"):
         case_token = extract_token(case_dir.name) or case_dir.name
         did_any = False
         if case_token in valtest_tokens:
-            if prepare_case(case_dir, valtest_out, zipped=not args.no_gzip, out_token=case_token):
+            if prepare_case(case_dir, valtest_out, zipped=not args.no_gzip, mr_subdir=args.mr_subdir, mask_subdir=args.mask_subdir, out_token=case_token):
                 staged_valtest += 1
                 did_any = True
         if case_token in train_tokens:
-            if prepare_case(case_dir, train_out, zipped=not args.no_gzip, out_token=case_token):
+            if prepare_case(case_dir, train_out, zipped=not args.no_gzip, mr_subdir=args.mr_subdir, mask_subdir=args.mask_subdir, out_token=case_token):
                 staged_train += 1
                 did_any = True
         if not did_any:
