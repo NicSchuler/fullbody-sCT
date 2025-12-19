@@ -83,9 +83,19 @@ class Pix2PixModel(BaseModel):
         self.real_B = input["B" if AtoB else "A"].to(self.device)
         self.image_paths = input["A_paths" if AtoB else "B_paths"]
 
+        # Store center IDs if present (for separate_first_layer models)
+        if 'center_id' in input:
+            self.center_ids = input['center_id'].to(self.device)
+        else:
+            self.center_ids = None
+
     def forward(self):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
-        self.fake_B = self.netG(self.real_A)  # G(A)
+        # Check if network accepts center_ids (for separate_first_layer models)
+        if hasattr(self.netG, 'separate_first_layer') and self.netG.separate_first_layer and self.center_ids is not None:
+            self.fake_B = self.netG(self.real_A, center_ids=self.center_ids)  # G(A) with center routing
+        else:
+            self.fake_B = self.netG(self.real_A)  # G(A)
 
     def backward_D(self):
         """Calculate GAN loss for the discriminator"""

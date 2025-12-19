@@ -12,3 +12,20 @@ CUDA_VISIBLE_DEVICES=7 python train.py \
 --n_epochs_decay 0 \
 --no_html \
 --print_freq 1000
+
+# for experiment 2 with separate first layers
+CUDA_VISIBLE_DEVICES=5 python train.py \
+--dataroot /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/7materialized_splits_31baselineBodyRegion/AB/pix2pix/AB \
+--checkpoints_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/8checkpoints \
+--name pix2pix_synthrad_abdomen_sep_input_layers \
+--model pix2pix \
+--direction AtoB \
+--input_nc 1 \
+--output_nc 1 \
+--batch_size 1 \
+--preprocess None \
+--netG unet_256_sep_first_layer \
+--n_epochs 100 \
+--n_epochs_decay 0 \
+--no_html \
+--print_freq 1000

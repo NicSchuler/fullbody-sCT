@@ -42,6 +42,21 @@ CUDA_VISIBLE_DEVICES=5 python validate_epochs_synth.py \
   --results_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/100results \
   --epoch all \
   --num_test 1000
+
+# Validate ALL saved epochs on all abdomen images with sep_first_layer netG
+CUDA_VISIBLE_DEVICES=6 python validate_epochs_synth.py \
+  --phase val \
+  --dataroot /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/7materialized_splits_31baselineBodyRegion/AB/pix2pix/AB \
+  --name pix2pix_synthrad_abdomen_sep_input_layers \
+  --checkpoints_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/8checkpoints \
+  --model pix2pix \
+  --direction AtoB \
+  --input_nc 1 \
+  --output_nc 1 \
+  --netG unet_256_sep_first_layer \
+  --results_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/100results \
+  --epoch all \
+  --num_test 2698
 """
 
 import os
