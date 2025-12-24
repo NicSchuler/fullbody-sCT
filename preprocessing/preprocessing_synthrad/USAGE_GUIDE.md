@@ -172,3 +172,25 @@ Synthrad_combined_preprocessed/
 - **Method validation**: Scripts will validate that the normalization method is valid
 - **Auto-configuration**: Scripts automatically configure input/output paths based on the normalization method
 - **Error checking**: Scripts check if required input directories exist before running
+
+
+# Postprocessing
+
+## 80: Volume Creator
+Reconstructs 3D NIfTI volumes from 2D NIfTI slices generated during testing. Stacks slices at 256x256 resolution and optionally reconstructs volumes at original patient-specific dimensions through reverse resampling.
+
+```bash
+# Basic usage: reconstruct sCT volumes at both 256x256 and original dimensions
+python ./80volume_creator.py pix2pix_synthrad_allregions
+
+# With all options: copy original CT/MR files and create validation volumes
+python ./80volume_creator.py pix2pix_synthrad_allregions --copy_originals --reconstruct_original
+```
+
+**Output files** (per patient):
+- `sCT_256_dim.nii.gz` - Reconstructed sCT at 256x256 resolution
+- `sCT_original_dim_mask_not_aligned.nii.gz` - sCT at original dimensions
+- With `--copy_originals`: Original CT/MR files from both resampled and initial data
+- With `--reconstruct_original`: Validation volume showing CT after preprocessing round-trip
+
+**Important**: Volumes at original dimensions are NOT aligned with original masks. Safe for dosimetric analysis, but not for image-level comparison with masked regions.
