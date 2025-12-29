@@ -111,12 +111,46 @@ class CycleGANModel(BaseModel):
         self.real_B = input["B" if AtoB else "A"].to(self.device)
         self.image_paths = input["A_paths" if AtoB else "B_paths"]
 
+        # Store center IDs for both domains if present (for separate_first_layer models)
+        # Note: direction swapping applies to center_ids too
+        if 'center_id_A' in input and 'center_id_B' in input:
+            self.center_ids_A = input["center_id_A" if AtoB else "center_id_B"].to(self.device)
+            self.center_ids_B = input["center_id_B" if AtoB else "center_id_A"].to(self.device)
+        else:
+            self.center_ids_A = None
+            self.center_ids_B = None
+
     def forward(self):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
-        self.fake_B = self.netG_A(self.real_A)  # G_A(A)
-        self.rec_A = self.netG_B(self.fake_B)  # G_B(G_A(A))
-        self.fake_A = self.netG_B(self.real_B)  # G_B(B)
-        self.rec_B = self.netG_A(self.fake_A)  # G_A(G_B(B))
+        # Check if generators use separate_first_layer
+        use_sep_A = hasattr(self.netG_A, 'separate_first_layer') and self.netG_A.separate_first_layer
+        use_sep_B = hasattr(self.netG_B, 'separate_first_layer') and self.netG_B.separate_first_layer
+
+        # G_A(A): Domain A → B, uses center_ids_A
+        if use_sep_A and self.center_ids_A is not None:
+            self.fake_B = self.netG_A(self.real_A, center_ids=self.center_ids_A)
+        else:
+            self.fake_B = self.netG_A(self.real_A)
+
+        # G_B(fake_B): Fake B → reconstructed A
+        # Note: fake_B has same batch order as real_A, so use center_ids_A
+        if use_sep_B and self.center_ids_A is not None:
+            self.rec_A = self.netG_B(self.fake_B, center_ids=self.center_ids_A)
+        else:
+            self.rec_A = self.netG_B(self.fake_B)
+
+        # G_B(B): Domain B → A, uses center_ids_B
+        if use_sep_B and self.center_ids_B is not None:
+            self.fake_A = self.netG_B(self.real_B, center_ids=self.center_ids_B)
+        else:
+            self.fake_A = self.netG_B(self.real_B)
+
+        # G_A(fake_A): Fake A → reconstructed B
+        # Note: fake_A has same batch order as real_B, so use center_ids_B
+        if use_sep_A and self.center_ids_B is not None:
+            self.rec_B = self.netG_A(self.fake_A, center_ids=self.center_ids_B)
+        else:
+            self.rec_B = self.netG_A(self.fake_A)
 
     def backward_D_basic(self, netD, real, fake):
         """Calculate GAN loss for the discriminator
@@ -157,11 +191,24 @@ class CycleGANModel(BaseModel):
         lambda_B = self.opt.lambda_B
         # Identity loss
         if lambda_idt > 0:
+            # Check if generators use separate_first_layer
+            use_sep_A = hasattr(self.netG_A, 'separate_first_layer') and self.netG_A.separate_first_layer
+            use_sep_B = hasattr(self.netG_B, 'separate_first_layer') and self.netG_B.separate_first_layer
+
             # G_A should be identity if real_B is fed: ||G_A(B) - B||
-            self.idt_A = self.netG_A(self.real_B)
+            # real_B uses center_ids_B
+            if use_sep_A and self.center_ids_B is not None:
+                self.idt_A = self.netG_A(self.real_B, center_ids=self.center_ids_B)
+            else:
+                self.idt_A = self.netG_A(self.real_B)
             self.loss_idt_A = self.criterionIdt(self.idt_A, self.real_B) * lambda_B * lambda_idt
+
             # G_B should be identity if real_A is fed: ||G_B(A) - A||
-            self.idt_B = self.netG_B(self.real_A)
+            # real_A uses center_ids_A
+            if use_sep_B and self.center_ids_A is not None:
+                self.idt_B = self.netG_B(self.real_A, center_ids=self.center_ids_A)
+            else:
+                self.idt_B = self.netG_B(self.real_A)
             self.loss_idt_B = self.criterionIdt(self.idt_B, self.real_A) * lambda_A * lambda_idt
         else:
             self.loss_idt_A = 0
