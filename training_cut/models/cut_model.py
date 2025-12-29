@@ -143,15 +143,41 @@ class CUTModel(BaseModel):
         self.real_B = input['B' if AtoB else 'A'].to(self.device)
         self.image_paths = input['A_paths' if AtoB else 'B_paths']
 
+        # Extract center_ids if present (for separate_first_layers models)
+        if 'center_id_A' in input and 'center_id_B' in input:
+            # Handle direction swapping: swap center_ids along with images
+            center_id_A_key = 'center_id_A' if AtoB else 'center_id_B'
+            center_id_B_key = 'center_id_B' if AtoB else 'center_id_A'
+
+            self.center_id_A = input[center_id_A_key].to(self.device)
+            self.center_id_B = input[center_id_B_key].to(self.device)
+        else:
+            self.center_id_A = None
+            self.center_id_B = None
+
     def forward(self):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
+        # Concatenate real_A and real_B when nce_idt is enabled
         self.real = torch.cat((self.real_A, self.real_B), dim=0) if self.opt.nce_idt and self.opt.isTrain else self.real_A
+
+        # CRITICAL: Concatenate center_ids in the SAME ORDER as images
+        if hasattr(self, 'center_id_A') and self.center_id_A is not None:
+            if self.opt.nce_idt and self.opt.isTrain:
+                # Images: [real_A, real_B], so center_ids: [center_id_A, center_id_B]
+                self.center_ids = torch.cat((self.center_id_A, self.center_id_B), dim=0)
+            else:
+                # Only real_A, so only center_id_A
+                self.center_ids = self.center_id_A
+        else:
+            self.center_ids = None
+
         if self.opt.flip_equivariance:
             self.flipped_for_equivariance = self.opt.isTrain and (np.random.random() < 0.5)
             if self.flipped_for_equivariance:
                 self.real = torch.flip(self.real, [3])
 
-        self.fake = self.netG(self.real)
+        # Pass center_ids to generator
+        self.fake = self.netG(self.real, center_ids=self.center_ids)
         self.fake_B = self.fake[:self.real_A.size(0)]
         if self.opt.nce_idt:
             self.idt_B = self.fake[self.real_A.size(0):]
@@ -197,12 +223,30 @@ class CUTModel(BaseModel):
 
     def calculate_NCE_loss(self, src, tgt):
         n_layers = len(self.nce_layers)
-        feat_q = self.netG(tgt, self.nce_layers, encode_only=True)
+
+        # Determine which center_ids to use for this NCE computation
+        # Called from compute_G_loss in two cases:
+        #   1. calculate_NCE_loss(self.real_A, self.fake_B) → use center_id_A
+        #   2. calculate_NCE_loss(self.real_B, self.idt_B) → use center_id_B
+        if self.center_ids is not None:
+            if tgt.size(0) == self.real_A.size(0):
+                # Case 1: (real_A, fake_B) - use center_id_A
+                center_ids_for_computation = self.center_id_A
+            else:
+                # Case 2: (real_B, idt_B) - use center_id_B
+                center_ids_for_computation = self.center_id_B
+        else:
+            center_ids_for_computation = None
+
+        # Extract features with center_ids
+        feat_q = self.netG(tgt, center_ids=center_ids_for_computation,
+                          layers=self.nce_layers, encode_only=True)
 
         if self.opt.flip_equivariance and self.flipped_for_equivariance:
             feat_q = [torch.flip(fq, [3]) for fq in feat_q]
 
-        feat_k = self.netG(src, self.nce_layers, encode_only=True)
+        feat_k = self.netG(src, center_ids=center_ids_for_computation,
+                          layers=self.nce_layers, encode_only=True)
         feat_k_pool, sample_ids = self.netF(feat_k, self.opt.num_patches, None)
         feat_q_pool, _ = self.netF(feat_q, self.opt.num_patches, sample_ids)
 
