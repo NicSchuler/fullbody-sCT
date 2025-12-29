@@ -39,17 +39,20 @@ class AlignedDataset(BaseDataset):
             filepath (str): Path to the image file
 
         Returns:
-            int: Center ID (0 for A, 1 for B, 2 for C), defaults to 0 if pattern not found
+            int or None: Center ID (0 for A, 1 for B, 2 for C), or None if pattern not found
         """
         filename = os.path.basename(filepath)
-        # Match pattern: AB_[numbers][A|B|C][numbers]-[numbers].nii
-        # We want to capture the letter (A, B, or C) that appears before the last set of digits before the hyphen
-        match = re.search(r'([ABC])\d+-\d+\.nii', filename)
-        if match:
-            center_letter = match.group(1)
-            # Convert A->0, B->1, C->2
-            return ord(center_letter) - ord('A')
-        return 0  # Default to center 0 (A) if pattern not found
+        # Check if filename starts with 'AB_' and matches the expected pattern
+        # Important: downstream applications cannot handle other body regions
+        # because of varying number of treatment centers and names!
+        if filename.startswith('AB_'):
+            # Match pattern: AB_[numbers][A|B|C][numbers]-[numbers].nii
+            match = re.search(r'AB_\dAB*([ABC])\d+-\d+\.nii', filename)
+            if match:
+                center_letter = match.group(1)
+                # Convert A->0, B->1, C->2
+                return ord(center_letter) - ord('A')
+        return None
 
     def __getitem__(self, index):
         """Return a data point and its metadata information.
@@ -95,10 +98,16 @@ class AlignedDataset(BaseDataset):
         A = A_transform(A)
         B = B_transform(B)
 
+        result = {'A': A, 'B': B, 'A_paths': AB_path, 'B_paths': AB_path}
+
         # Extract center ID from filename
         center_id = self._extract_center_id(AB_path)
 
-        return {'A': A, 'B': B, 'A_paths': AB_path, 'B_paths': AB_path, 'center_id': center_id}
+        # Only add center_ids if they are not None
+        if center_id is not None:
+            result['center_id'] = center_id
+
+        return result
 
     def __len__(self):
         """Return the total number of images in the dataset."""
