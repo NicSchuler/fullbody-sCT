@@ -105,3 +105,19 @@ CUDA_VISIBLE_DEVICES=2 python test_synth.py \
   --input_nc 1 \
   --output_nc 1 \
   --results_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/100results \
+
+
+
+  ## FINAL
+
+
+  CUDA_VISIBLE_DEVICES=0 python test_synth.py \
+  --phase test \
+  --dataroot /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/7materialized_splits_31baselineBodyRegion/AB/pix2pix/AB \
+  --name pix2pix_synthrad_abdomen_final \
+  --checkpoints_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/8checkpoints \
+  --model pix2pix \
+  --direction AtoB \
+  --input_nc 1 \
+  --output_nc 1 \
+  --results_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/100results \
