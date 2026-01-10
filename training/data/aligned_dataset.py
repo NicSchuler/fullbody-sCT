@@ -5,6 +5,7 @@ from PIL import Image
 import random
 import nibabel as nib
 import numpy as np
+import re
 
 
 class AlignedDataset(BaseDataset):
@@ -26,6 +27,32 @@ class AlignedDataset(BaseDataset):
         assert(self.opt.load_size >= self.opt.crop_size)   # crop_size should be smaller than the size of loaded image
         self.input_nc = self.opt.output_nc if self.opt.direction == 'BtoA' else self.opt.input_nc
         self.output_nc = self.opt.input_nc if self.opt.direction == 'BtoA' else self.opt.output_nc
+
+    def _extract_center_id(self, filepath):
+        """Extract center ID from filename.
+
+        Parses filenames with pattern 'AB_[numbers][A|B|C][numbers]-*.nii'
+        where the last letter (A, B, or C) before the final number determines the center.
+        Examples: 'AB_1ABA005-1.nii' -> A (center 0), 'AB_1ABC122-48.nii' -> C (center 2)
+
+        Parameters:
+            filepath (str): Path to the image file
+
+        Returns:
+            int or None: Center ID (0 for A, 1 for B, 2 for C), or None if pattern not found
+        """
+        filename = os.path.basename(filepath)
+        # Check if filename starts with 'AB_' and matches the expected pattern
+        # Important: downstream applications cannot handle other body regions
+        # because of varying number of treatment centers and names!
+        if filename.startswith('AB_'):
+            # Match pattern: AB_[numbers][A|B|C][numbers]-[numbers].nii
+            match = re.search(r'AB_\dAB*([ABC])\d+-\d+\.nii', filename)
+            if match:
+                center_letter = match.group(1)
+                # Convert A->0, B->1, C->2
+                return ord(center_letter) - ord('A')
+        return None
 
     def __getitem__(self, index):
         """Return a data point and its metadata information.
@@ -71,7 +98,16 @@ class AlignedDataset(BaseDataset):
         A = A_transform(A)
         B = B_transform(B)
 
-        return {'A': A, 'B': B, 'A_paths': AB_path, 'B_paths': AB_path}
+        result = {'A': A, 'B': B, 'A_paths': AB_path, 'B_paths': AB_path}
+
+        # Extract center ID from filename
+        center_id = self._extract_center_id(AB_path)
+
+        # Only add center_ids if they are not None
+        if center_id is not None:
+            result['center_id'] = center_id
+
+        return result
 
     def __len__(self):
         """Return the total number of images in the dataset."""

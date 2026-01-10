@@ -248,6 +248,8 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
 
     if netG == 'resnet_9blocks':
         net = ResnetGenerator(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, no_antialias=no_antialias, no_antialias_up=no_antialias_up, n_blocks=9, opt=opt)
+    elif netG == 'resnet_9blocks_sep_first_layer':
+        net = ResnetGenerator(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, no_antialias=no_antialias, no_antialias_up=no_antialias_up, n_blocks=9, opt=opt, separate_first_layers=True)
     elif netG == 'resnet_6blocks':
         net = ResnetGenerator(input_nc, output_nc, ngf, norm_layer=norm_layer, use_dropout=use_dropout, no_antialias=no_antialias, no_antialias_up=no_antialias_up, n_blocks=6, opt=opt)
     elif netG == 'resnet_4blocks':
@@ -912,13 +914,93 @@ class LayerNorm(nn.Module):
         return x
 
 
+class ResnetSeparateFirstLayerBlock(nn.Module):
+    """Center-specific first layer for ResNet generator.
+
+    Implements 3 parallel paths (ReflectionPad→Conv→Norm→ReLU),
+    one for each treatment center, with routing based on center_ids.
+
+    This is analogous to SeparateFirstLayerBlock in the UNet implementation
+    but adapted for ResNet's architecture (kernel_size=7, ReflectionPad).
+    """
+
+    def __init__(self, input_nc, ngf, norm_layer, use_bias):
+        """
+        Parameters:
+            input_nc (int): Input channels
+            ngf (int): Number of generator filters (output channels)
+            norm_layer: Normalization layer constructor
+            use_bias (bool): Whether Conv2d uses bias
+        """
+        super(ResnetSeparateFirstLayerBlock, self).__init__()
+
+        # Create 3 parallel first-layer blocks (one per center)
+        # Each block: ReflectionPad(3) → Conv2d(input_nc, ngf, 7) → Norm → ReLU
+        self.center_blocks = nn.ModuleList([
+            nn.Sequential(
+                nn.ReflectionPad2d(3),
+                nn.Conv2d(input_nc, ngf, kernel_size=7, padding=0, bias=use_bias),
+                norm_layer(ngf),
+                nn.ReLU(True)
+            )
+            for _ in range(3)  # 3 centers: A, B, C
+        ])
+
+        # Store output channels for reference
+        self.out_channels = ngf
+
+    def forward(self, x, center_ids):
+        """
+        Forward pass with center-specific routing.
+
+        Parameters:
+            x: Input tensor [B, input_nc, H, W]
+            center_ids: Tensor [B] with values in {0, 1, 2}
+
+        Returns:
+            Output tensor [B, ngf, H, W]
+        """
+        if center_ids is None:
+            raise ValueError("center_ids required for ResnetSeparateFirstLayerBlock")
+
+        batch_size = x.size(0)
+        device = x.device
+
+        # Ensure center_ids on same device
+        if center_ids.device != device:
+            center_ids = center_ids.to(device)
+
+        # Validate center_ids range
+        if center_ids.min() < 0 or center_ids.max() >= 3:
+            raise ValueError(
+                f"center_ids must be in [0,2], got [{center_ids.min()}, {center_ids.max()}]"
+            )
+
+        # Initialize output tensor
+        # Note: Output spatial dimensions are same as input (due to padding)
+        output = torch.zeros(
+            batch_size, self.out_channels, x.size(2), x.size(3),
+            device=device, dtype=x.dtype
+        )
+
+        # Route samples through center-specific blocks
+        # This batches all samples from the same center together for efficiency
+        for center_idx in range(3):
+            mask = (center_ids == center_idx)
+            if mask.any():
+                # Process all samples from this center
+                output[mask] = self.center_blocks[center_idx](x[mask])
+
+        return output
+
+
 class ResnetGenerator(nn.Module):
     """Resnet-based generator that consists of Resnet blocks between a few downsampling/upsampling operations.
 
     We adapt Torch code and idea from Justin Johnson's neural style transfer project(https://github.com/jcjohnson/fast-neural-style)
     """
 
-    def __init__(self, input_nc, output_nc, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, n_blocks=6, padding_type='reflect', no_antialias=False, no_antialias_up=False, opt=None):
+    def __init__(self, input_nc, output_nc, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, n_blocks=6, padding_type='reflect', no_antialias=False, no_antialias_up=False, opt=None, separate_first_layers=False):
         """Construct a Resnet-based generator
 
         Parameters:
@@ -933,15 +1015,26 @@ class ResnetGenerator(nn.Module):
         assert(n_blocks >= 0)
         super(ResnetGenerator, self).__init__()
         self.opt = opt
+        self.separate_first_layers = separate_first_layers
         if type(norm_layer) == functools.partial:
             use_bias = norm_layer.func == nn.InstanceNorm2d
         else:
             use_bias = norm_layer == nn.InstanceNorm2d
 
-        model = [nn.ReflectionPad2d(3),
-                 nn.Conv2d(input_nc, ngf, kernel_size=7, padding=0, bias=use_bias),
-                 norm_layer(ngf),
-                 nn.ReLU(True)]
+        model = []
+        if separate_first_layers:
+            # Use center-specific first layer
+            model.append(
+                ResnetSeparateFirstLayerBlock(input_nc, ngf, norm_layer, use_bias)
+            )
+        else:
+            # Standard first layer
+            model.extend([
+                nn.ReflectionPad2d(3),
+                nn.Conv2d(input_nc, ngf, kernel_size=7, padding=0, bias=use_bias),
+                norm_layer(ngf),
+                nn.ReLU(True)
+            ])
 
         n_downsampling = 2
         for i in range(n_downsampling):  # add downsampling layers
@@ -982,32 +1075,66 @@ class ResnetGenerator(nn.Module):
         model += [nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0)]
         model += [nn.Tanh()]
 
-        self.model = nn.Sequential(*model)
+        if separate_first_layers:
+            self.model = nn.ModuleList(model)
+        else:
+            self.model = nn.Sequential(*model)
 
-    def forward(self, input, layers=[], encode_only=False):
+    def forward(self, input, center_ids=None, layers=[], encode_only=False):
+        # Validate center_ids requirement
+        if self.separate_first_layers and center_ids is None:
+            raise ValueError("center_ids required when separate_first_layers=True")
+
+        # BACKWARD COMPATIBILITY PATH: Standard Sequential
+        if not self.separate_first_layers:
+            # Original implementation (completely unchanged)
+            if -1 in layers:
+                layers.append(len(self.model))
+            if len(layers) > 0:
+                feat = input
+                feats = []
+                for layer_id, layer in enumerate(self.model):
+                    feat = layer(feat)
+                    if layer_id in layers:
+                        feats.append(feat)
+                    if layer_id == layers[-1] and encode_only:
+                        return feats
+                return feat, feats
+            else:
+                fake = self.model(input)
+                return fake
+
+        # NEW PATH: ModuleList with separate first layers
         if -1 in layers:
             layers.append(len(self.model))
+
         if len(layers) > 0:
+            # Feature extraction mode (for NCE loss)
             feat = input
             feats = []
             for layer_id, layer in enumerate(self.model):
-                # print(layer_id, layer)
-                feat = layer(feat)
-                if layer_id in layers:
-                    # print("%d: adding the output of %s %d" % (layer_id, layer.__class__.__name__, feat.size(1)))
-                    feats.append(feat)
+                # Special handling for first layer with center_ids
+                if layer_id == 0 and isinstance(layer, ResnetSeparateFirstLayerBlock):
+                    feat = layer(feat, center_ids)
                 else:
-                    # print("%d: skipping %s %d" % (layer_id, layer.__class__.__name__, feat.size(1)))
-                    pass
-                if layer_id == layers[-1] and encode_only:
-                    # print('encoder only return features')
-                    return feats  # return intermediate features alone; stop in the last layers
+                    feat = layer(feat)
 
-            return feat, feats  # return both output and intermediate features
+                if layer_id in layers:
+                    feats.append(feat)
+
+                if layer_id == layers[-1] and encode_only:
+                    return feats
+
+            return feat, feats
         else:
-            """Standard forward"""
-            fake = self.model(input)
-            return fake
+            # Standard forward without feature extraction
+            feat = input
+            for layer_id, layer in enumerate(self.model):
+                if layer_id == 0 and isinstance(layer, ResnetSeparateFirstLayerBlock):
+                    feat = layer(feat, center_ids)
+                else:
+                    feat = layer(feat)
+            return feat
 
 
 class ResnetDecoder(nn.Module):

@@ -155,6 +155,8 @@ def define_G(input_nc, output_nc, ngf, netG, norm="batch", use_dropout=False, in
         net = UnetGenerator(input_nc, output_nc, 7, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
     elif netG == "unet_256":
         net = UnetGenerator(input_nc, output_nc, 8, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
+    elif netG == "unet_256_sep_first_layer":
+        net = UnetGenerator(input_nc, output_nc, 8, ngf, norm_layer=norm_layer, use_dropout=use_dropout, separate_first_layer=True)
     else:
         raise NotImplementedError("Generator model name [%s] is not recognized" % netG)
     return net
@@ -421,10 +423,106 @@ class ResnetBlock(nn.Module):
         return out
 
 
+class SeparateFirstLayerBlock(nn.Module):
+    """Custom first layer with center-specific Conv2d weights.
+
+    This module contains 3 parallel Conv2d layers, one for each treatment center.
+    During forward pass, each sample is routed through its corresponding center's layer.
+    """
+
+    def __init__(self, input_nc, output_nc, inner_nc, submodule, norm_layer, use_bias):
+        """
+        Parameters:
+            input_nc (int): Input channels (e.g., 1 for grayscale CT)
+            output_nc (int): Output channels (same as UNet output_nc)
+            inner_nc (int): Internal feature channels (ngf)
+            submodule: The rest of the UNet architecture
+            norm_layer: Normalization layer (shared across centers)
+            use_bias (bool): Whether to use bias in Conv2d
+        """
+        super(SeparateFirstLayerBlock, self).__init__()
+        self.outermost = True
+
+        # Create 3 separate Conv2d layers for 3 centers
+        # Each has same architecture but independent weights
+        self.center_convs = nn.ModuleList([
+            nn.Conv2d(input_nc, inner_nc, kernel_size=4, stride=2, padding=1, bias=use_bias)
+            for _ in range(3)
+        ])
+
+        # Rest of the UNet (shared across all centers)
+        self.submodule = submodule
+
+        # Upsampling path (same as standard UNet outermost layer)
+        self.uprelu = nn.ReLU(True)
+        self.upconv = nn.ConvTranspose2d(inner_nc * 2, output_nc, kernel_size=4, stride=2, padding=1)
+        self.tanh = nn.Tanh()
+
+    def forward(self, x, center_ids=None):
+        """
+        Forward pass with center-specific routing.
+
+        Parameters:
+            x: Input tensor [B, C, H, W]
+            center_ids: Tensor of center IDs [B] with values in {0, 1, 2}
+
+        Returns:
+            Output tensor [B, output_nc, H, W]
+        """
+        if center_ids is None:
+            raise ValueError("center_ids must be provided for SeparateFirstLayerBlock")
+
+        batch_size = x.size(0)
+        device = x.device
+
+        # Ensure center_ids is on same device as input
+        if center_ids.device != x.device:
+            center_ids = center_ids.to(x.device)
+
+        # Validate center_ids range
+        if center_ids.min() < 0 or center_ids.max() >= 3:
+            raise ValueError(f"center_ids must be in range [0, 2], got range [{center_ids.min()}, {center_ids.max()}]")
+
+        # Initialize output tensor for first conv layer
+        # Shape: [B, inner_nc, H/2, W/2] (due to stride=2)
+        first_conv_out = torch.zeros(
+            batch_size,
+            self.center_convs[0].out_channels,
+            x.size(2) // 2,
+            x.size(3) // 2,
+            device=device,
+            dtype=x.dtype
+        )
+
+        # Route each sample through its corresponding center's conv layer
+        # This is efficient with batching - we process all samples from same center together
+        for center_idx in range(3):
+            # Create mask for samples from this center
+            mask = (center_ids == center_idx)
+            if mask.any():
+                # Get samples from this center
+                center_samples = x[mask]
+                # Pass through center-specific conv
+                center_output = self.center_convs[center_idx](center_samples)
+                # Place back in the output tensor
+                first_conv_out[mask] = center_output
+
+        # Continue through rest of UNet (shared across centers)
+        # The submodule is the rest of the UNet encoder-decoder
+        unet_features = self.submodule(first_conv_out)
+
+        # Upsampling path (outermost layer behavior)
+        out = self.uprelu(unet_features)
+        out = self.upconv(out)
+        out = self.tanh(out)
+
+        return out
+
+
 class UnetGenerator(nn.Module):
     """Create a Unet-based generator"""
 
-    def __init__(self, input_nc, output_nc, num_downs, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False):
+    def __init__(self, input_nc, output_nc, num_downs, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, separate_first_layer=False):
         """Construct a Unet generator
         Parameters:
             input_nc (int)  -- the number of channels in input images
@@ -433,11 +531,23 @@ class UnetGenerator(nn.Module):
                                 image of size 128x128 will become of size 1x1 # at the bottleneck
             ngf (int)       -- the number of filters in the last conv layer
             norm_layer      -- normalization layer
+            use_dropout (bool) -- whether to use dropout
+            separate_first_layer (bool) -- whether to use center-specific first layer
 
         We construct the U-Net from the innermost layer to the outermost layer.
         It is a recursive process.
         """
         super(UnetGenerator, self).__init__()
+
+        # Store flag for forward pass logic
+        self.separate_first_layer = separate_first_layer
+
+        # Determine bias usage based on norm_layer
+        if type(norm_layer) == functools.partial:
+            use_bias = norm_layer.func == nn.InstanceNorm2d
+        else:
+            use_bias = norm_layer == nn.InstanceNorm2d
+
         # construct unet structure
         unet_block = UnetSkipConnectionBlock(ngf * 8, ngf * 8, input_nc=None, submodule=None, norm_layer=norm_layer, innermost=True)  # add the innermost layer
         for i in range(num_downs - 5):  # add intermediate layers with ngf * 8 filters
@@ -446,11 +556,35 @@ class UnetGenerator(nn.Module):
         unet_block = UnetSkipConnectionBlock(ngf * 4, ngf * 8, input_nc=None, submodule=unet_block, norm_layer=norm_layer)
         unet_block = UnetSkipConnectionBlock(ngf * 2, ngf * 4, input_nc=None, submodule=unet_block, norm_layer=norm_layer)
         unet_block = UnetSkipConnectionBlock(ngf, ngf * 2, input_nc=None, submodule=unet_block, norm_layer=norm_layer)
-        self.model = UnetSkipConnectionBlock(output_nc, ngf, input_nc=input_nc, submodule=unet_block, outermost=True, norm_layer=norm_layer)  # add the outermost layer
 
-    def forward(self, input):
-        """Standard forward"""
-        return self.model(input)
+        # Choose outermost layer based on separate_first_layer flag
+        if separate_first_layer:
+            self.model = SeparateFirstLayerBlock(
+                input_nc=input_nc,
+                output_nc=output_nc,
+                inner_nc=ngf,
+                submodule=unet_block,
+                norm_layer=norm_layer,
+                use_bias=use_bias
+            )
+        else:
+            # Standard UNet outermost layer
+            self.model = UnetSkipConnectionBlock(output_nc, ngf, input_nc=input_nc, submodule=unet_block, outermost=True, norm_layer=norm_layer)  # add the outermost layer
+
+    def forward(self, input, center_ids=None):
+        """Standard forward (with optional center routing for separate_first_layer)
+
+        Parameters:
+            input: Input tensor [B, input_nc, H, W]
+            center_ids: Optional tensor [B] with center indices (required if separate_first_layer=True)
+
+        Returns:
+            Output tensor [B, output_nc, H, W]
+        """
+        if self.separate_first_layer:
+            return self.model(input, center_ids=center_ids)
+        else:
+            return self.model(input)
 
 
 class UnetSkipConnectionBlock(nn.Module):
