@@ -1,0 +1,14 @@
+CUDA_VISIBLE_DEVICES=0 python train.py --dataroot '/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/7materialized_splits_31baselineBodyRegion/AB/cyclegan/train' \
+--checkpoints_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/8checkpoints \
+--name cyclegan_abdomen_sep_first_layer \
+--model cycle_gan  \
+--input_nc 1 \
+--output_nc 1 \
+--batch_size 1 \
+--preprocess None \
+--netG unet_256_sep_first_layer \
+--netD basic \
+--n_epochs 100 \
+--n_epochs_decay 0 \
+--print_freq 100 \
+--save_epoch_freq 1

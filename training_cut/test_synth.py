@@ -191,7 +191,10 @@ if __name__ == '__main__':
         pd.DataFrame(res_test, columns=['file_name', 'MAE', "MSE","PSNR", 'SSIM']).drop(columns=["file_name"]).mean().squeeze()
     ], index=[ 'Test set']).T
 
-    pd.DataFrame(res_test, columns=['file_name', 'MAE', "MSE","PSNR", 'SSIM']).to_csv(os.path.join(opt.results_dir, opt.name, "test_metrics_over_all.csv"))
+    metrics_dir = os.path.join(opt.results_dir, opt.name, f"{opt.phase}_{opt.epoch}")
+    pd.DataFrame(res_test, columns=['file_name', 'MAE', "MSE","PSNR", 'SSIM']).to_csv(
+        os.path.join(metrics_dir, "test_metrics_over_all.csv")
+    )
 
     print(df)
 
@@ -199,5 +202,7 @@ if __name__ == '__main__':
     st_d_df = pd.DataFrame([
         pd.DataFrame(res_test, columns=['file_name', 'MAE', "MSE","PSNR", 'SSIM']).drop(columns=["file_name"]).std().squeeze()
     ], index=[ 'Test set']).T
+
+    st_d_df.to_csv(os.path.join(metrics_dir, "test_metrics_std_over_all.csv"))
 
     print(st_d_df)
