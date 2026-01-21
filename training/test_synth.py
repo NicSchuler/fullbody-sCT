@@ -98,7 +98,11 @@ if __name__ == '__main__':
 
     res_test = []
 
-    results_path=os.path.join("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/9latestTestImages",opt.name, opt.body_part)
+    results_path = os.path.join(
+        "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/9latestTestImages",
+        opt.name,
+        '{}_{}'.format(opt.phase, opt.epoch),
+    )
 
     if os.path.exists(results_path):
         print("Such path {} exists. Removing it".format(results_path))
