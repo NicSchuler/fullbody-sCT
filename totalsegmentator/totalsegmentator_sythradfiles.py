@@ -51,51 +51,67 @@ def run_totalseg_for_image(image_path: str, modality_dir: str) -> None:
       - body mask (body task)
     All results go to {modality_dir}/totalsegmentator_output/
     """
-    modality_path = os.path.dirname(image_path)
-    output_dir = os.path.join(modality_path, "totalsegmentator_output")
+    image_dir = os.path.dirname(image_path)
+    output_dir = os.path.join(image_dir, "totalsegmentator_output")
     os.makedirs(output_dir, exist_ok=True)
 
     print(f"\n=== Processing {modality_dir}: {image_path} ===")
     print(f"Output dir: {output_dir}")
 
-    # 1) Liver
+    is_mr = modality_dir == "MR"
+    is_ct = modality_dir in {"CT", "CT_reg"}
+
+    # ---- 1) Liver ----
     if has_liver_mask(output_dir):
         print("Liver mask already exists — skipping liver segmentation.")
     else:
-        print(" -> Liver (task='total', roi_subset=['liver'])")
+        liver_task = "total_mr" if is_mr else "total"
+        print(f" -> Liver (task='{liver_task}', roi_subset=['liver'])")
         totalsegmentator(
             image_path,
             output_dir,
-            task="total",
+            task=liver_task,
             roi_subset=["liver"],
-            fast=True,
+            fast=not is_mr,
             device="gpu",
         )
 
-    # 2) Fat (subcutaneous_fat, torso_fat, skeletal_muscle, ...)
-    print(" -> Fat & muscle (task='tissue_types')")
+    # ---- 2) Fat & muscle ----
     if has_fat_masks(output_dir):
         print("Fat & muscle masks already exist — skipping fat segmentation.")
     else:
-        print(" -> Fat & muscle (task='tissue_types')")
+        fat_task = "tissue_types_mr" if is_mr else "tissue_types"
+        print(f" -> Fat & muscle (task='{fat_task}')")
         totalsegmentator(
             image_path,
             output_dir,
-            task="tissue_types",
+            task=fat_task,
             fast=False,  # fast not allowed here
             device="gpu",
         )
 
-    # 3) Body mask -currently done only if needed
+    # ---- 3) Body mask (optional) ----
     if False:
-        print(" -> Body mask (task='body')")
-        totalsegmentator(
-            image_path,
-            output_dir,
-            task="body",
-            fast=True,
-            device="gpu",
-        )
+        # If you enable this, keep in mind:
+        # - For CT: task="body" + fast=True is fine
+        # - For MR: task="body" may or may not be supported depending on your TS version/models
+        if is_mr:
+            print(" -> Body mask for MR: only run if your TS version supports it.")
+            totalsegmentator(
+                image_path,
+                output_dir,
+                task="body",
+                device="gpu",
+            )
+        else:
+            print(" -> Body mask (task='body')")
+            totalsegmentator(
+                image_path,
+                output_dir,
+                task="body",
+                fast=True,
+                device="gpu",
+            )
 
 
 
