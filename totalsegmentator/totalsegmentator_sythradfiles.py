@@ -11,20 +11,20 @@ BASE_DIR = "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/1
 
 
 
-def find_ct_reg_nii(patient_dir: str) -> str | None:
+def find_modality_nii(patient_dir: str, modality_dir: str, name_hint: str) -> str | None:
     """
-    Look for a CT_reg folder and then a NIfTI inside.
-    Prefer files matching *CT_reg.nii*; fall back to any .nii/.nii.gz.
+    Look for a modality folder and then a NIfTI inside.
+    Prefer files matching *{name_hint}.nii*; fall back to any .nii/.nii.gz.
     """
-    ct_reg_dir = os.path.join(patient_dir, "CT_reg")
-    if not os.path.isdir(ct_reg_dir):
+    modality_path = os.path.join(patient_dir, modality_dir)
+    if not os.path.isdir(modality_path):
         return None
 
     # first try the specific pattern
-    candidates = sorted(glob.glob(os.path.join(ct_reg_dir, "*CT_reg.nii*")))
+    candidates = sorted(glob.glob(os.path.join(modality_path, f"*{name_hint}.nii*")))
     if not candidates:
-        # fallback: any nifti in CT_reg
-        candidates = sorted(glob.glob(os.path.join(ct_reg_dir, "*.nii*")))
+        # fallback: any nifti in modality folder
+        candidates = sorted(glob.glob(os.path.join(modality_path, "*.nii*")))
 
     return candidates[0] if candidates else None
 
@@ -43,19 +43,19 @@ def has_fat_masks(output_dir: str) -> bool:
 
 
 
-def run_totalseg_for_ct(ct_path: str) -> None:
+def run_totalseg_for_image(image_path: str, modality_dir: str) -> None:
     """
-    Run TotalSegmentator on a single CT:
+    Run TotalSegmentator on a single image:
       - liver (from 'total' task)
       - fat tissues (tissue_types task)
       - body mask (body task)
-    All results go to CT_reg/totalsegmentator_output/
+    All results go to {modality_dir}/totalsegmentator_output/
     """
-    ct_reg_dir = os.path.dirname(ct_path)
-    output_dir = os.path.join(ct_reg_dir, "totalsegmentator_output")
+    modality_path = os.path.dirname(image_path)
+    output_dir = os.path.join(modality_path, "totalsegmentator_output")
     os.makedirs(output_dir, exist_ok=True)
 
-    print(f"\n=== Processing CT: {ct_path} ===")
+    print(f"\n=== Processing {modality_dir}: {image_path} ===")
     print(f"Output dir: {output_dir}")
 
     # 1) Liver
@@ -64,7 +64,7 @@ def run_totalseg_for_ct(ct_path: str) -> None:
     else:
         print(" -> Liver (task='total', roi_subset=['liver'])")
         totalsegmentator(
-            ct_path,
+            image_path,
             output_dir,
             task="total",
             roi_subset=["liver"],
@@ -79,7 +79,7 @@ def run_totalseg_for_ct(ct_path: str) -> None:
     else:
         print(" -> Fat & muscle (task='tissue_types')")
         totalsegmentator(
-            ct_path,
+            image_path,
             output_dir,
             task="tissue_types",
             fast=False,  # fast not allowed here
@@ -90,7 +90,7 @@ def run_totalseg_for_ct(ct_path: str) -> None:
     if False:
         print(" -> Body mask (task='body')")
         totalsegmentator(
-            ct_path,
+            image_path,
             output_dir,
             task="body",
             fast=True,
@@ -107,17 +107,22 @@ def main():
         if p.startswith("AB_") and os.path.isdir(os.path.join(BASE_DIR, p))
     ]
 
-    print(f"Found {len(patient_dirs)} CTs to process.")
+    print(f"Found {len(patient_dirs)} patient folders to process.")
 
     for patient_name in tqdm(patient_dirs):
         patient_dir = os.path.join(BASE_DIR, patient_name)
 
-        ct_path = find_ct_reg_nii(patient_dir)
+        ct_path = find_modality_nii(patient_dir, "CT_reg", "CT_reg")
         if ct_path is None:
             print(f"No CT_reg NIfTI found for patient: {patient_name}")
-            continue
+        else:
+            run_totalseg_for_image(ct_path, "CT_reg")
 
-        run_totalseg_for_ct(ct_path)
+        mr_path = find_modality_nii(patient_dir, "MR", "MR")
+        if mr_path is None:
+            print(f"No MR NIfTI found for patient: {patient_name}")
+        else:
+            run_totalseg_for_image(mr_path, "MR")
 
 
 
