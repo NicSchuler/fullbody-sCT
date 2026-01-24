@@ -35,7 +35,7 @@ import nibabel as nib
 NORMALIZATION_METHOD = "32p99"  # Default: per-file p99
 
 # Base directory
-BASE_ROOT = "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed"
+BASE_ROOT = "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/experiment2"
 
 # Will be set dynamically based on NORMALIZATION_METHOD
 CT_ROOT = None

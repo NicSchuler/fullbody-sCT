@@ -38,7 +38,7 @@ CUDA_VISIBLE_DEVICES=7 python train.py \
 
 
 
-CUDA_VISIBLE_DEVICES=2 python train.py \
+CUDA_VISIBLE_DEVICES=0 python train.py \
 --dataroot /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/experiment2/33nyul/7materialized_splits_BodyRegion/AB/pix2pix/AB \
 --checkpoints_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/8checkpoints \
 --name 2_experiment_pix2pix_synthrad_abdomen_33nyul \

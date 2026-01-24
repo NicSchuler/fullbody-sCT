@@ -9,7 +9,7 @@ from pathlib import Path
 NORMALIZATION_METHOD = "32p99"  # Default
 
 # Base directory
-BASE_ROOT = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed")
+BASE_ROOT = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/experiment2")
 
 # Will be set based on NORMALIZATION_METHOD
 ROOT = None

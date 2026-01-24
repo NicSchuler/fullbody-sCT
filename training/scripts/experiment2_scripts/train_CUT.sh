@@ -40,7 +40,7 @@ CUDA_VISIBLE_DEVICES=6 python train.py \
 
 
 
-CUDA_VISIBLE_DEVICES=6 python train.py \
+CUDA_VISIBLE_DEVICES=3 python train.py \
 --dataroot '/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/experiment2/33nyul/7materialized_splits_BodyRegion/AB/cyclegan/train' \
 --checkpoints_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/8checkpoints \
 --name 2_experiment_cut_synthrad_abdomen_33nyul \

@@ -1,19 +1,19 @@
 """Stage MR + mask volumes for Nyul training and application.
 
 Default experiment layout:
-    Input cases:
-        /.../experiment2/31baseline/3normalized/<PATIENT_ID>/{MR,new_masks}/*.nii.gz
+    Input cases (resampled only, no normalization):
+        /.../2resampledNifti/<PATIENT_ID>/{MR,new_masks}/*.nii.gz
     Outputs (Nyul-ready):
-        /.../experiment2/33nyul/25NiftiNyulReady/trainingforcalc/{MR,masks}/<PATIENT>_*.nii.gz
+        /.../experiment2/33nyul/3_1NiftiNyulReady/trainingforcalc/{MR,masks}/<PATIENT>_*.nii.gz
             - contains TRAIN only (used to fit Nyul)
-        /.../experiment2/33nyul/25NiftiNyulReady/valtest/{MR,masks}/<PATIENT>_*.nii.gz
+        /.../experiment2/33nyul/3_1NiftiNyulReady/valtest/{MR,masks}/<PATIENT>_*.nii.gz
             - contains VAL + TEST (later normalized with train-fit mapping)
 
 Usage:
     python 33_1prepare_for_nyul.py \
         --base-root     /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed \
-        --input-root    /local/.../experiment2/31baseline/3normalized \
-        --output-root   /local/.../experiment2/33nyul/25NiftiNyulReady \
+        --input-root    /local/.../2resampledNifti \
+        --output-root   /local/.../experiment2/33nyul/3_1NiftiNyulReady \
         --manifest      /local/.../splits_manifest.csv
 
 Optional:
@@ -47,8 +47,8 @@ def extract_token(text: str) -> Optional[str]:
 
 
 DEFAULT_BASE = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed")
-DEFAULT_INPUT_ROOT = DEFAULT_BASE / "experiment2" / "31baseline" / "3normalized"
-DEFAULT_OUTPUT_ROOT = DEFAULT_BASE / "experiment2" / "33nyul" / "25NiftiNyulReady"
+DEFAULT_INPUT_ROOT = DEFAULT_BASE  / "2resampledNifti"
+DEFAULT_OUTPUT_ROOT = DEFAULT_BASE / "experiment2" / "33nyul" / "3_1NiftiNyulReady"
 
 
 def parse_args():
@@ -60,6 +60,7 @@ def parse_args():
     p.add_argument("--mask-subdir", default=DEFAULT_MASK_SUBDIR, help="Name of mask subdirectory inside each case folder")
     p.add_argument("--manifest", default=str(DEFAULT_BASE / "splits_manifest.csv"), help="CSV manifest with split,patient_token columns")
     p.add_argument("--no-gzip", action="store_true", help="Write .nii instead of .nii.gz")
+    p.add_argument("--all-data", action="store_true", help="Include all body regions (default: abdomen only)")
     return p.parse_args()
 
 
@@ -129,6 +130,8 @@ def main():
     staged_train = 0
     staged_valtest = 0
     case_dirs = sorted(d for d in in_path.iterdir() if d.is_dir())
+    if not args.all_data:
+        case_dirs = [d for d in case_dirs if d.name.startswith("AB_")]
     for case_dir in tqdm(case_dirs, desc="Staging cases"):
         case_token = extract_token(case_dir.name) or case_dir.name
         did_any = False
