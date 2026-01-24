@@ -4,6 +4,7 @@ Resample TotalSegmentator masks to match the resampled CT/MR images.
 This script takes the TotalSegmentator masks (liver, torso_fat, subcutaneous_fat, etc.)
 from 1initNifti and applies the same transformations as 20resampling.py to produce
 masks that are aligned with the resampled images in 2resampledNifti.
+It prefers MR-derived masks when available and falls back to CT_reg masks otherwise.
 
 The transformations include:
 1. Crop to body mask bounding box
@@ -17,6 +18,7 @@ Usage:
 import numpy as np
 import SimpleITK as sitk
 from pathlib import Path
+from typing import Optional, Tuple
 from tqdm import tqdm
 
 # ==========================
@@ -38,6 +40,9 @@ TOTALSEGMENTATOR_MASKS = [
     "subcutaneous_fat.nii.gz",
     "skeletal_muscle.nii.gz",
 ]
+
+# Prefer MR-derived masks when available, then fall back to CT_reg (order is priority)
+TS_MODALITY_DIRS = ["MR", "CT_reg"]
 
 # Background value for masks
 MASK_BACKGROUND = 0
@@ -206,6 +211,20 @@ def get_first_nifti(folder: Path):
     return None
 
 
+def find_totalseg_dir(case_dir: Path) -> Tuple[Optional[Path], Optional[str]]:
+    """
+    Find the first available TotalSegmentator output folder by modality priority.
+
+    Returns:
+        (totalseg_dir, modality_name) or (None, None) if not found.
+    """
+    for modality in TS_MODALITY_DIRS:
+        ts_dir = case_dir / modality / "totalsegmentator_output"
+        if ts_dir.exists():
+            return ts_dir, modality
+    return None, None
+
+
 def make_out_name(mask_name: str) -> str:
     """
     Create output filename for resampled mask.
@@ -252,9 +271,9 @@ def process_totalsegmentator_masks(case_dir: Path, out_case_dir: Path):
             return
         raise
     
-    # TotalSegmentator output directory
-    ts_dir = case_dir / "CT_reg" / "totalsegmentator_output"
-    if not ts_dir.exists():
+    # TotalSegmentator output directory (prefer MR, fallback CT_reg)
+    ts_dir, ts_modality = find_totalseg_dir(case_dir)
+    if ts_dir is None:
         print(f"[SKIP] {case_id}: no totalsegmentator_output directory")
         return
     
@@ -266,7 +285,7 @@ def process_totalsegmentator_masks(case_dir: Path, out_case_dir: Path):
     for mask_name in TOTALSEGMENTATOR_MASKS:
         mask_path = ts_dir / mask_name
         if not mask_path.exists():
-            print(f"  [SKIP] {case_id}: {mask_name} not found")
+            print(f"  [SKIP] {case_id}: {mask_name} not found in {ts_modality}")
             continue
         
         # Load mask
