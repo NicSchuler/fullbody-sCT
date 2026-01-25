@@ -96,24 +96,32 @@ def peak_signal_to_noise_ratio(image_true, image_generated,slice_mask):
     return psnr
 
 
-def structural_similarity_index(image_true, image_generated, C1=0.01, C2=0.03):
+def structural_similarity_index(image_true, image_generated, slice_mask=None, C1=0.01, C2=0.03):
     """Compute structural similarity index.
 
     Args:
         image_true: (Tensor) true image
         image_generated: (Tensor) generated image
+        slice_mask: (Tensor) optional mask for valid voxels
         C1: (float) variable to stabilize the denominator
         C2: (float) variable to stabilize the denominator
 
     Returns:
         ssim: (float) mean squared error"""
 
-    mean_true = image_true.mean()
-    mean_generated = image_generated.mean()
-    std_true = image_true.std()
-    std_generated = image_generated.std()
+    if slice_mask is None or slice_mask.shape != image_true.shape:
+        true_vals = image_true
+        gen_vals = image_generated
+    else:
+        true_vals = image_true[slice_mask != 0]
+        gen_vals = image_generated[slice_mask != 0]
+
+    mean_true = true_vals.mean()
+    mean_generated = gen_vals.mean()
+    std_true = true_vals.std()
+    std_generated = gen_vals.std()
     covariance = (
-        (image_true - mean_true) * (image_generated - mean_generated)).mean()
+        (true_vals - mean_true) * (gen_vals - mean_generated)).mean()
 
     numerator = (2 * mean_true * mean_generated + C1) * (2 * covariance + C2)
     denominator = ((mean_true ** 2 + mean_generated ** 2 + C1) *
