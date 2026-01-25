@@ -36,6 +36,9 @@ import shutil
 from pathlib import Path
 from typing import Optional
 
+import nibabel as nib
+import numpy as np
+
 RE_TOKEN = re.compile(r"1(?:AB|HN|TH|B|P)[A-D][0-9]{3}")
 
 
@@ -150,7 +153,14 @@ def main() -> int:
         out_name = baseline_mr.name if baseline_mr else nyul_file.name
 
         if not args.dry_run:
-            shutil.copy2(nyul_file, out_mr_dir / out_name)
+            out_path = out_mr_dir / out_name
+            img = nib.load(str(nyul_file))
+            data = img.get_fdata()
+            data = np.clip(data, 0.0, 1.0)
+            header = img.header.copy()
+            header.set_data_dtype(np.float32)
+            clipped = nib.Nifti1Image(data.astype(np.float32, copy=False), img.affine, header)
+            nib.save(clipped, str(out_path))
 
         # Always copy masks to keep structure consistent
         masks_src = case_dir / "new_masks"
