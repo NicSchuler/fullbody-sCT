@@ -1,3 +1,17 @@
+"""
+    Usage:
+        python 70create_subsets_per_body_region.py [normalization_method]
+    
+    Examples:
+        python 70create_subsets_per_body_region.py 31baseline
+        python 70create_subsets_per_body_region.py 32p99
+        python 70create_subsets_per_body_region.py 33nyul
+        python 70create_subsets_per_body_region.py 34npeaks
+    
+    If no argument is provided, uses default: 32p99
+    
+    This will create body-region-specific subsets from the materialized splits.
+    """
 
 import os
 import shutil
@@ -9,7 +23,7 @@ from pathlib import Path
 NORMALIZATION_METHOD = "32p99"  # Default
 
 # Base directory
-BASE_ROOT = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed")
+BASE_ROOT = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/experiment2")
 
 # Will be set based on NORMALIZATION_METHOD
 ROOT = None
@@ -148,18 +162,4 @@ def main():
 
 
 if __name__ == "__main__":
-    """
-    Usage:
-        python 70create_subsets_per_body_region.py [normalization_method]
-    
-    Examples:
-        python 70create_subsets_per_body_region.py 31baseline
-        python 70create_subsets_per_body_region.py 32p99
-        python 70create_subsets_per_body_region.py 33nyul
-        python 70create_subsets_per_body_region.py 34npeaks
-    
-    If no argument is provided, uses default: 32p99
-    
-    This will create body-region-specific subsets from the materialized splits.
-    """
     main()

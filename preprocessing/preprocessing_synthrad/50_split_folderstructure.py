@@ -153,7 +153,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description="Materialize split folder structure from manifest (no splitting)."
     )
-    DEFAULT_BASE = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed")
+    DEFAULT_BASE = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/experiment2")
     p.add_argument(
         "normalization_method",
         nargs="?",
@@ -168,7 +168,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     )
     p.add_argument(
         "--manifest",
-        default=str(DEFAULT_BASE / "splits_manifest.csv"),
+        default=str(Path(__file__).parent / "splits_manifest.csv"),
         help="CSV with columns: split, patient_token",
     )
     p.add_argument(
