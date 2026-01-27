@@ -36,13 +36,18 @@ def get_body_region(patient_id: str) -> str:
     return patient_id.split("_")[0]
 
 
-def find_original_ct_init(patient_id: str) -> Path:
+def find_original_ct_init(patient_id: str, init_dir: Path = None) -> Path:
     """
     Find the original CT volume in 1initNifti.
 
     Searches for: 1initNifti/{patient_id}/CT_reg/*.nii.gz
+
+    Args:
+        patient_id: Patient identifier
+        init_dir: Optional custom init directory (default: INIT_DIR)
     """
-    ct_dir = INIT_DIR / patient_id / "CT_reg"
+    _init_dir = init_dir if init_dir is not None else INIT_DIR
+    ct_dir = _init_dir / patient_id / "CT_reg"
     if ct_dir.exists():
         for f in ct_dir.iterdir():
             if f.suffix == '.gz' or f.suffix == '.nii':
@@ -50,13 +55,18 @@ def find_original_ct_init(patient_id: str) -> Path:
     return None
 
 
-def find_original_mr_init(patient_id: str) -> Path:
+def find_original_mr_init(patient_id: str, init_dir: Path = None) -> Path:
     """
     Find the original MR volume in 1initNifti.
 
     Searches for: 1initNifti/{patient_id}/MR/*.nii.gz
+
+    Args:
+        patient_id: Patient identifier
+        init_dir: Optional custom init directory (default: INIT_DIR)
     """
-    mr_dir = INIT_DIR / patient_id / "MR"
+    _init_dir = init_dir if init_dir is not None else INIT_DIR
+    mr_dir = _init_dir / patient_id / "MR"
     if mr_dir.exists():
         for f in mr_dir.iterdir():
             if f.suffix == '.gz' or f.suffix == '.nii':
@@ -64,7 +74,12 @@ def find_original_mr_init(patient_id: str) -> Path:
     return None
 
 
-def reverse_resample_to_original(resampled_img: nib.Nifti1Image, patient_id: str) -> nib.Nifti1Image:
+def reverse_resample_to_original(
+    resampled_img: nib.Nifti1Image,
+    patient_id: str,
+    init_dir: Path = None,
+    use_mr_reference: bool = False
+) -> nib.Nifti1Image:
     """
     Reverse resampling transformations to restore original 1initNifti dimensions.
 
@@ -75,16 +90,31 @@ def reverse_resample_to_original(resampled_img: nib.Nifti1Image, patient_id: str
     Args:
         resampled_img: The reconstructed volume at resampled resolution (256x256xZ)
         patient_id: Patient identifier (e.g., "AB_1ABA009")
+        init_dir: Optional custom init directory (default: INIT_DIR)
+        use_mr_reference: If True, prefer MR as reference instead of CT (for inference)
 
     Returns:
         Volume with exact same dimensions as 1initNifti, or None if failed
     """
-    # Load original CT for metadata
-    original_ct_path = find_original_ct_init(patient_id)
+    # Load original reference for metadata
+    original_ref_path = None
 
-    if original_ct_path is None:
-        print(f"  !WARNING! Missing original CT for {patient_id}")
+    if use_mr_reference:
+        # For inference: prefer MR, fallback to CT
+        original_ref_path = find_original_mr_init(patient_id, init_dir)
+        if original_ref_path is None:
+            original_ref_path = find_original_ct_init(patient_id, init_dir)
+    else:
+        # For training/validation: prefer CT, fallback to MR
+        original_ref_path = find_original_ct_init(patient_id, init_dir)
+        if original_ref_path is None:
+            original_ref_path = find_original_mr_init(patient_id, init_dir)
+
+    if original_ref_path is None:
+        print(f"  !WARNING! Missing original reference (CT or MR) for {patient_id}")
         return None
+
+    original_ct_path = original_ref_path  # Keep variable name for minimal changes below
 
     # Load original CT to get target dimensions
     original_ct_img = nib.load(original_ct_path)

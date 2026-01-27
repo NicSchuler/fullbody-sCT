@@ -9,12 +9,16 @@ This is a simple baseline approach using fixed thresholds.
 Usage:
     python 31baseline_standardization.py              # Abdomen only (default)
     python 31baseline_standardization.py --all-data   # All body regions
+    python 31baseline_standardization.py --mr-only    # MR only (for inference)
+    python 31baseline_standardization.py --mr-only --all-data --src-root /path/to/input --out-root /path/to/output
 """
 
+import argparse
 import sys
 import numpy as np
 import SimpleITK as sitk
 from pathlib import Path
+from tqdm import tqdm
 
 
 # ==========================
@@ -97,57 +101,113 @@ def process_image(in_path: Path, out_path: Path):
     sitk.WriteImage(out_img, str(out_path), useCompression=save_zipped)
 
 
-def process_case(case_dir: Path, out_root: Path):
+def process_case(case_dir: Path, out_root: Path, mr_only: bool = False):
     """
     Process all images in a case directory.
+
+    Args:
+        case_dir: Input case directory
+        out_root: Output root directory
+        mr_only: If True, skip CT_reg subdirectory processing (for inference)
     """
     case_id = case_dir.name
-    
+
     # Process all subdirectories (CT_reg, MR, masks)
     for subdir in case_dir.iterdir():
         if subdir.is_dir():
+            # Skip CT_reg if in MR-only mode
+            if mr_only and subdir.name == "CT_reg":
+                continue
+
             for nii_file in subdir.glob("*.nii*"):
                 # Create corresponding output path
                 out_file = out_root / case_id / subdir.name / nii_file.name
                 process_image(nii_file, out_file)
-    
-    print(f"[OK] {case_id}")
+
+
+def parse_args():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Apply baseline intensity normalization to NIfTI volumes.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    # Original behavior (abdomen only):
+    python 31baseline_standardization.py
+
+    # All body regions:
+    python 31baseline_standardization.py --all-data
+
+    # Inference mode (MR only, all regions, custom paths):
+    python 31baseline_standardization.py --mr-only --all-data \\
+        --src-root /path/to/2resampledNifti \\
+        --out-root /path/to/31baseline/3normalized
+        """
+    )
+
+    parser.add_argument(
+        "--src-root", type=str, default=None,
+        help=f"Source directory (default: {src_root})"
+    )
+    parser.add_argument(
+        "--out-root", type=str, default=None,
+        help=f"Output directory (default: {out_root})"
+    )
+    parser.add_argument(
+        "--all-data", action="store_true",
+        help="Process all body regions, not just abdomen"
+    )
+    parser.add_argument(
+        "--mr-only", action="store_true",
+        help="Process MR only, skip CT normalization (for inference)"
+    )
+    parser.add_argument(
+        "--patient-ids", nargs="+", default=None,
+        help="Specific patient IDs to process (default: all)"
+    )
+
+    return parser.parse_args()
 
 
 def main():
-    # Parse command-line arguments
-    abdomen_only = True  # Default to abdomen only
-    if len(sys.argv) > 1 and sys.argv[1] == "--all-data":
-        abdomen_only = False
-    
-    count = 0
-    all_dirs = [d for d in src_root.iterdir() if d.is_dir()]
-    
-    # Filter for abdomen only if requested
-    if abdomen_only:
-        case_dirs = [d for d in all_dirs if d.name.startswith("AB_")]
-        filter_msg = "Abdomen only (AB_*)"
+    args = parse_args()
+
+    # Use command line args or defaults
+    input_root = Path(args.src_root) if args.src_root else src_root
+    output_root = Path(args.out_root) if args.out_root else out_root
+    abdomen_only = not args.all_data
+    mr_only = args.mr_only
+
+    # Get case directories
+    if args.patient_ids:
+        case_dirs = [input_root / pid for pid in args.patient_ids if (input_root / pid).is_dir()]
     else:
-        case_dirs = all_dirs
-        filter_msg = "All body regions"
-    
+        all_dirs = [d for d in input_root.iterdir() if d.is_dir()]
+        # Filter for abdomen only if requested
+        if abdomen_only:
+            case_dirs = [d for d in all_dirs if d.name.startswith("AB_")]
+        else:
+            case_dirs = all_dirs
+
+    filter_msg = "Abdomen only (AB_*)" if abdomen_only else "All body regions"
     total = len(case_dirs)
-    
-    print(f"Starting 31 Baseline Standardization")
-    print(f"Input:  {src_root}")
-    print(f"Output: {out_root}")
-    print(f"Filter: {filter_msg}")
-    print(f"CT:  [-1024, 1200] HU → [0, 1]")
-    print(f"MRI: [0, 2000] → [0, 1]")
-    print("-" * 60)
-    
-    for case_dir in sorted(case_dirs):
-        process_case(case_dir, out_root)
+
+    print("=" * 60)
+    print("31 Baseline Standardization")
+    print("=" * 60)
+    print(f"Input:    {input_root}")
+    print(f"Output:   {output_root}")
+    print(f"Filter:   {filter_msg}")
+    print(f"MR only:  {mr_only}")
+    print(f"CT:       [-1024, 1200] HU → [0, 1]")
+    print(f"MRI:      [0, 2000] → [0, 1]")
+    print("=" * 60)
+
+    count = 0
+    for case_dir in tqdm(sorted(case_dirs)):
+        process_case(case_dir, output_root, mr_only=mr_only)
         count += 1
-        
-        if count % 25 == 0:
-            print(f"Processed {count}/{total} cases...")
-    
+
     print(f"\nCompleted: {count}/{total} cases processed")
 
 

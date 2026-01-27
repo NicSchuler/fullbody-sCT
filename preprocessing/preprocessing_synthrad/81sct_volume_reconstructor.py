@@ -91,14 +91,14 @@ def parse_nifti_slice_filename(filename: str):
     """
     Parse NIfTI slice filename to extract patient_id and slice_num.
 
-    Example: "AB_1ABA009_38.nii" or "AB_1ABA009_38.nii.gz"
-    Returns: ("AB_1ABA009", 38)
+    Example:
+    - AB_1ABA009_38.nii
+    - HN_1HNAxxx_5.nii
+    - *.nii.gz supported
 
-    Returns None if parsing fails.
+    Returns: (patient_id, slice_num) or None
     """
-    # Pattern: {PATIENT_ID}_{SLICE_NUM}.nii[.gz]
-    # Patient ID format: PREFIX_1ABC123 where PREFIX can be AB, HN, TH, brain, pelvis, etc.
-    pattern = r'^([A-Za-z]+_\d[A-Z]{1,3}\d{2,3})_(\d+)\.nii(\.gz)?$'
+    pattern = r'^([A-Za-z]+_\d[A-Z]{1,3}(?:\d{2,3}|xxx))_(\d+)\.nii(\.gz)?$'
     match = re.match(pattern, filename)
 
     if not match:
@@ -110,15 +110,39 @@ def parse_nifti_slice_filename(filename: str):
     return patient_id, slice_num
 
 
-def find_resampled_ct(patient_id: str) -> Path:
+def find_resampled_ct(patient_id: str, resampled_dir: Path = None) -> Path:
     """
     Find the CT volume in 2resampledNifti for reference affine.
 
     Searches for: 2resampledNifti/{patient_id}/CT_reg/*.nii.gz
+
+    Args:
+        patient_id: Patient identifier
+        resampled_dir: Optional custom resampled directory (default: RESAMPLED_DIR)
     """
-    ct_dir = RESAMPLED_DIR / patient_id / "CT_reg"
+    _resampled_dir = resampled_dir if resampled_dir is not None else RESAMPLED_DIR
+    ct_dir = _resampled_dir / patient_id / "CT_reg"
     if ct_dir.exists():
         for f in ct_dir.iterdir():
+            if f.suffix == '.gz' or f.suffix == '.nii':
+                return f
+    return None
+
+
+def find_resampled_mr(patient_id: str, resampled_dir: Path = None) -> Path:
+    """
+    Find the MR volume in 2resampledNifti for reference affine.
+
+    Searches for: 2resampledNifti/{patient_id}/MR/*.nii.gz
+
+    Args:
+        patient_id: Patient identifier
+        resampled_dir: Optional custom resampled directory (default: RESAMPLED_DIR)
+    """
+    _resampled_dir = resampled_dir if resampled_dir is not None else RESAMPLED_DIR
+    mr_dir = _resampled_dir / patient_id / "MR"
+    if mr_dir.exists():
+        for f in mr_dir.iterdir():
             if f.suffix == '.gz' or f.suffix == '.nii':
                 return f
     return None
@@ -232,7 +256,10 @@ def process_patient(
     fake_slices: dict,
     fake_dir: Path,
     output_dir: Path,
-    copy_originals: bool = False
+    copy_originals: bool = False,
+    init_dir: Path = None,
+    resampled_dir: Path = None,
+    use_mr_reference: bool = False
 ) -> bool:
     """
     Process one patient: reconstruct sCT volume at original dimensions,
@@ -244,6 +271,9 @@ def process_patient(
         fake_dir: Directory containing fake NIfTI slices
         output_dir: Base output directory for reconstructions
         copy_originals: Whether to copy original CT/MR files to output
+        init_dir: Optional custom init directory for original volumes
+        resampled_dir: Optional custom resampled directory for reference affine
+        use_mr_reference: If True, use MR as reference instead of CT (for inference)
 
     Returns:
         True if successful, False otherwise
@@ -251,20 +281,29 @@ def process_patient(
     patient_out_dir = output_dir / patient_id
     patient_out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Find and load resampled CT for reference affine
-    resampled_ct_path = find_resampled_ct(patient_id)
+    # Find and load resampled volume for reference affine
     reference_affine = None
+    if use_mr_reference:
+        # For inference: prefer MR, fallback to CT
+        resampled_path = find_resampled_mr(patient_id, resampled_dir)
+        if resampled_path is None:
+            resampled_path = find_resampled_ct(patient_id, resampled_dir)
+    else:
+        # For training/validation: prefer CT, fallback to MR
+        resampled_path = find_resampled_ct(patient_id, resampled_dir)
+        if resampled_path is None:
+            resampled_path = find_resampled_mr(patient_id, resampled_dir)
 
-    if resampled_ct_path:
+    if resampled_path:
         try:
-            resampled_img = nib.load(resampled_ct_path)
+            resampled_img = nib.load(resampled_path)
             reference_affine = resampled_img.affine
         except Exception as e:
-            print(f"  !WARNING! Could not load resampled CT for {patient_id}: {e}")
+            print(f"  !WARNING! Could not load resampled reference for {patient_id}: {e}")
 
     # Find and optionally copy original (1initNifti) CT and MR
     if copy_originals:
-        original_ct_init_path = find_original_ct_init(patient_id)
+        original_ct_init_path = find_original_ct_init(patient_id, init_dir)
         if original_ct_init_path:
             try:
                 dest_ct_original = patient_out_dir / "CT_original_dim_copy_1initNifti.nii.gz"
@@ -273,7 +312,7 @@ def process_patient(
             except Exception as e:
                 print(f"  !WARNING! Could not copy original CT from 1initNifti for {patient_id}: {e}")
 
-        original_mr_init_path = find_original_mr_init(patient_id)
+        original_mr_init_path = find_original_mr_init(patient_id, init_dir)
         if original_mr_init_path:
             try:
                 dest_mr_original = patient_out_dir / "MR_original_dim_copy_1initNifti.nii.gz"
@@ -298,7 +337,10 @@ def process_patient(
         else:
             # Create original dimension version by reversing resampling
             try:
-                original_result = reverse_resample_to_original(resampled_result, patient_id)
+                original_result = reverse_resample_to_original(
+                    resampled_result, patient_id,
+                    init_dir=init_dir, use_mr_reference=use_mr_reference
+                )
 
                 if original_result is not None:
                     fake_output_original = patient_out_dir / "sCT_original_dim_reconstructed_alignment.nii.gz"
@@ -324,8 +366,16 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python 81sct_volume_reconstructor.py pix2pix_synthrad_abdomen
-  python 81sct_volume_reconstructor.py pix2pix_synthrad_abdomen --copy_originals
+  # Training/validation mode (uses CT as reference):
+  python 81sct_volume_reconstructor.py pix2pix_synthrad_abdomen/test_50
+  python 81sct_volume_reconstructor.py pix2pix_synthrad_abdomen/test_50 --copy_originals
+
+  # Inference mode (uses MR as reference, custom directories):
+  python 81sct_volume_reconstructor.py model_name/test_50 \\
+      --test-images-dir /path/to/9inference \\
+      --init-dir /path/to/1initNifti \\
+      --resampled-dir /path/to/2resampledNifti \\
+      --use-mr-reference
 
 Output Files:
   Always created:
@@ -343,7 +393,7 @@ IMPORTANT: The "reconstructed_alignment" naming indicates that spatial alignment
     parser.add_argument(
         "model_region_folder",
         type=str,
-        help="Model/region folder name in 9latestTestImages (e.g., pix2pix_synthrad_abdomen)"
+        help="Model/region folder name in test images dir (e.g., pix2pix_synthrad_abdomen/test_50)"
     )
 
     parser.add_argument(
@@ -351,6 +401,34 @@ IMPORTANT: The "reconstructed_alignment" naming indicates that spatial alignment
         action="store_true",
         default=False,
         help="Copy original CT/MR files to output folder (default: False)"
+    )
+
+    parser.add_argument(
+        "--test-images-dir",
+        type=str,
+        default=None,
+        help=f"Override test images directory (default: {TEST_IMAGES_DIR})"
+    )
+
+    parser.add_argument(
+        "--init-dir",
+        type=str,
+        default=None,
+        help=f"Override init directory for original volumes (default: {INIT_DIR})"
+    )
+
+    parser.add_argument(
+        "--resampled-dir",
+        type=str,
+        default=None,
+        help=f"Override resampled directory for reference affine (default: {RESAMPLED_DIR})"
+    )
+
+    parser.add_argument(
+        "--use-mr-reference",
+        action="store_true",
+        default=False,
+        help="Use MR as reference instead of CT (for inference mode)"
     )
 
     # Show available folders if no arguments
@@ -367,8 +445,13 @@ IMPORTANT: The "reconstructed_alignment" naming indicates that spatial alignment
     args = parser.parse_args()
     model_region = args.model_region_folder
 
+    # Determine directories
+    test_images_dir = Path(args.test_images_dir) if args.test_images_dir else TEST_IMAGES_DIR
+    init_dir = Path(args.init_dir) if args.init_dir else INIT_DIR
+    resampled_dir = Path(args.resampled_dir) if args.resampled_dir else RESAMPLED_DIR
+
     # Paths
-    model_dir = TEST_IMAGES_DIR / model_region
+    model_dir = test_images_dir / model_region
     fake_dir = model_dir / "fake_nifti"
     output_dir = model_dir / "reconstruction"
 
@@ -385,10 +468,13 @@ IMPORTANT: The "reconstructed_alignment" naming indicates that spatial alignment
     print("sCT Volume Reconstruction from NIfTI Slices")
     print("=" * 80)
     print(f"Model/Region:           {model_region}")
+    print(f"Test images dir:        {test_images_dir}")
     print(f"Fake slices:            {fake_dir}")
-    print(f"Original data:          {INIT_DIR}")
+    print(f"Init dir (originals):   {init_dir}")
+    print(f"Resampled dir:          {resampled_dir}")
     print(f"Output:                 {output_dir}")
     print(f"Copy originals:         {args.copy_originals}")
+    print(f"Use MR reference:       {args.use_mr_reference}")
     print("=" * 80)
     print()
 
@@ -433,7 +519,10 @@ IMPORTANT: The "reconstructed_alignment" naming indicates that spatial alignment
             fake_slices.get(patient_id, {}),
             fake_dir,
             output_dir,
-            copy_originals=args.copy_originals
+            copy_originals=args.copy_originals,
+            init_dir=init_dir,
+            resampled_dir=resampled_dir,
+            use_mr_reference=args.use_mr_reference
         )
         if success:
             success_count += 1

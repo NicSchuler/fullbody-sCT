@@ -2,21 +2,24 @@
 
 """
 Usage:
-    python 40slice_creator.py [normalization_method]
+    python 40slice_creator.py [normalization_method] [options]
 
 Examples:
+    # Training mode (paired CT+MR):
     python 40slice_creator.py 31baseline
     python 40slice_creator.py 32p99
-    python 40slice_creator.py 33nyul
-    python 40slice_creator.py 34npeaks
+
+    # Inference mode (MR only):
+    python 40slice_creator.py 31baseline --mr-only --base-root /path/to/output
 
 If no argument is provided, uses default: 32p99 (per-file p99)
 
 This will:
-    - Read from: {method}/3normalized/
-    - Write to:  {method}/5slices/
+    - Read from: {base_root}/{method}/3normalized/
+    - Write to:  {base_root}/{method}/5slices/
 """
 
+import argparse
 import os
 import sys
 import shutil
@@ -240,102 +243,264 @@ def create_slices_for_pair(
         save_slice(mask_slice, mask_img.affine, os.path.join(PATH_OUTPUT_MASK, slice_name), is_mr=False)
 
 
-def configure_paths(method: str):
-    """Configure input/output paths based on normalization method."""
+def create_slices_mr_only(
+    patient_id: str,
+    mr_path: str,
+    base_model: str,
+    mask_path: str
+):
+    """
+    Creates 2D slices for MR only (inference mode).
+    Only populates domain A (MR), skips domain B (CT).
+
+    This function is used for inference when no CT ground truth is available.
+
+    Args:
+        patient_id: Patient identifier
+        mr_path: Path to MR NIfTI volume
+        base_model: Base output directory for model-style layout
+        mask_path: Path to mask NIfTI volume
+    """
+    global PATH_OUTPUT_MASK
+
+    # model (unpaired-style) dirs - only A for MR
+    model_A_dir = os.path.join(base_model, "full", "A")
+    os.makedirs(model_A_dir, exist_ok=True)
+
+    # load volumes
+    mr_img = nib.load(mr_path)
+    mask_img = nib.load(mask_path)
+
+    mr = mr_img.get_fdata()
+    mask = mask_img.get_fdata()
+
+    if mr.shape != mask.shape:
+        print(f"!WARNING! Shape mismatch for {patient_id}: MR{mr.shape} vs Mask{mask.shape}, skipping")
+        return
+
+    if mr.ndim != 3:
+        print(f"!WARNING! Non-3D volume for {patient_id}, skipping")
+        return
+
+    nz = mr.shape[2]
+
+    if SKIP_FIRST_LAST and nz > 2:
+        z_range = range(1, nz - 1)
+    else:
+        z_range = range(0, nz)
+
+    for i in z_range:
+        if NN_INPUT_MODE == "2d":
+            mr_slice = mr[..., i:i+1]  # (x, y, 1)
+            mask_slice = mask[..., i:i+1]
+        else:
+            # pseudo3d: 3 slices as channels
+            if i == 0 or i == nz - 1:
+                continue
+            mr_slice = mr[..., i-1:i+2]
+            mask_slice = mask[..., i-1:i+2]
+
+        slice_name = f"{patient_id}-{i}.{SLICE_EXT}"
+
+        # Save MR slice (domain A)
+        save_slice(mr_slice, mr_img.affine, os.path.join(model_A_dir, slice_name), is_mr=True)
+        # Save mask slice
+        save_slice(mask_slice, mask_img.affine, os.path.join(PATH_OUTPUT_MASK, slice_name), is_mr=False)
+
+
+def configure_paths(method: str, custom_base_root: str = None, mr_only: bool = False):
+    """Configure input/output paths based on normalization method.
+
+    Args:
+        method: Normalization method (31baseline, 32p99, etc.)
+        custom_base_root: Optional custom base directory (overrides BASE_ROOT)
+        mr_only: If True, don't check for CT directory existence
+    """
     global CT_ROOT, MR_ROOT, OUT_ROOT, SLICE_ROOT
-    
+
     valid_methods = ["31baseline", "32p99", "33nyul", "34npeaks"]
-    
+
     if method not in valid_methods:
         raise ValueError(
             f"Invalid normalization method: '{method}'\n"
             f"Valid options: {valid_methods}"
         )
-    
+
+    # Use custom base root if provided
+    base = custom_base_root if custom_base_root else BASE_ROOT
+
     # Input: normalized data from 31-34 scripts
-    CT_ROOT = os.path.join(BASE_ROOT, method, "3normalized")
-    MR_ROOT = os.path.join(BASE_ROOT, method, "3normalized")
-    SLICE_ROOT = os.path.join(BASE_ROOT, method, "3normalized")
-    
+    CT_ROOT = os.path.join(base, method, "3normalized")
+    MR_ROOT = os.path.join(base, method, "3normalized")
+    SLICE_ROOT = os.path.join(base, method, "3normalized")
+
     # Output: slices with matching suffix
-    OUT_ROOT = os.path.join(BASE_ROOT, method, "5slices")
-    
-    # Verify input directories exist
-    if not os.path.exists(CT_ROOT):
+    OUT_ROOT = os.path.join(base, method, "5slices")
+
+    # Verify input directories exist (only check MR if mr_only mode)
+    if not os.path.exists(MR_ROOT):
         raise FileNotFoundError(
-            f"Input directory not found: {CT_ROOT}\n"
+            f"Input directory not found: {MR_ROOT}\n"
             f"Please run the corresponding normalization script first (e.g., {method}_standardization.py)"
         )
-    
+
     print(f"=" * 60)
     print(f"Normalization method: {method}")
-    print(f"CT_ROOT  = {CT_ROOT}")
-    print(f"MR_ROOT  = {MR_ROOT}")
-    print(f"OUT_ROOT = {OUT_ROOT}")
-    print(f"SLICE_ROOT = {SLICE_ROOT}")
+    print(f"Base root:   {base}")
+    print(f"MR_ROOT:     {MR_ROOT}")
+    if not mr_only:
+        print(f"CT_ROOT:     {CT_ROOT}")
+    print(f"OUT_ROOT:    {OUT_ROOT}")
+    print(f"SLICE_ROOT:  {SLICE_ROOT}")
+    print(f"MR only:     {mr_only}")
     print(f"=" * 60)
+
+
+def parse_args():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Create 2D slices from 3D NIfTI volumes.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    # Training mode (paired CT+MR):
+    python 40slice_creator.py 31baseline
+
+    # Inference mode (MR only):
+    python 40slice_creator.py 31baseline --mr-only \\
+        --base-root /path/to/output
+
+    # Process specific patients:
+    python 40slice_creator.py 31baseline --patient-ids AB_1ABA005
+        """
+    )
+
+    parser.add_argument(
+        "normalization_method",
+        nargs="?",
+        default="32p99",
+        choices=["31baseline", "32p99", "33nyul", "34npeaks"],
+        help="Normalization method (default: 32p99)"
+    )
+    parser.add_argument(
+        "--base-root", type=str, default=None,
+        help=f"Base root directory (default: {BASE_ROOT})"
+    )
+    parser.add_argument(
+        "--mr-only", action="store_true",
+        help="Create slices for MR only (inference mode, no CT required)"
+    )
+    parser.add_argument(
+        "--patient-ids", nargs="+", default=None,
+        help="Specific patient IDs to process (default: all)"
+    )
+
+    return parser.parse_args()
 
 
 def main():
-    global NORMALIZATION_METHOD
-    
-    # Parse command line argument if provided
-    if len(sys.argv) > 1:
-        NORMALIZATION_METHOD = sys.argv[1]
-    
+    global NORMALIZATION_METHOD, PATH_OUTPUT_MASK
+
+    args = parse_args()
+    NORMALIZATION_METHOD = args.normalization_method
+    mr_only = args.mr_only
+
     # Configure paths based on normalization method
-    configure_paths(NORMALIZATION_METHOD)
-    
+    configure_paths(NORMALIZATION_METHOD, args.base_root, mr_only=mr_only)
+
     print(f"Input mode: {NN_INPUT_MODE}")
     print(f"Skip first/last slice: {SKIP_FIRST_LAST}")
     print(f"Slice extension: {SLICE_EXT}")
     print()
 
-    # 1) discover paired patients
-    patients = []
-    for entry in tqdm(sorted(os.listdir(CT_ROOT))):
-        patient_dir = os.path.join(CT_ROOT, entry)
-        if not os.path.isdir(patient_dir):
-            continue
+    if mr_only:
+        # MR-only mode for inference
+        patients = []
+        for entry in tqdm(sorted(os.listdir(MR_ROOT)), desc="Discovering patients"):
+            patient_dir = os.path.join(MR_ROOT, entry)
+            if not os.path.isdir(patient_dir):
+                continue
 
-        ct_path = find_ct_nifti_for_patient(patient_dir)
-        if ct_path is None:
-            continue
+            # Filter by patient IDs if specified
+            if args.patient_ids and entry not in args.patient_ids:
+                continue
 
-        mr_path = find_mr_nifti_for_patient(MR_ROOT, entry)
-        if mr_path is None:
-            print(f"!WARNING! No MR found for patient {entry}, skipping")
-            continue
+            mr_path = find_mr_nifti_for_patient(MR_ROOT, entry)
+            if mr_path is None:
+                print(f"!WARNING! No MR found for patient {entry}, skipping")
+                continue
 
-        mask_path = find_slice_nifti_for_patient(SLICE_ROOT, entry)
-        if mask_path is None:
-            print(f"!WARNING! No mask slice found for patient {entry}, skipping")
-            continue
+            mask_path = find_slice_nifti_for_patient(SLICE_ROOT, entry)
+            if mask_path is None:
+                print(f"!WARNING! No mask slice found for patient {entry}, skipping")
+                continue
 
-        
-        patients.append((entry, ct_path, mr_path, mask_path))
+            patients.append((entry, mr_path, mask_path))
 
-    if not patients:
-        raise RuntimeError("No paired CT+MR patients found. Check CT_ROOT and MR_ROOT.")
+        if not patients:
+            raise RuntimeError("No MR patients found. Check MR_ROOT.")
 
-    print(f"Found {len(patients)} paired patients")
+        print(f"Found {len(patients)} patients (MR only mode)")
 
-    # 2) prepare output structure (no split here)
-    path_model = os.path.join(OUT_ROOT, f"model_{NN_INPUT_MODE}")
-    path_pix = os.path.join(OUT_ROOT, f"pix2pix_{NN_INPUT_MODE}")
+        # Prepare output structure (only model_2d for inference)
+        path_model = os.path.join(OUT_ROOT, f"model_{NN_INPUT_MODE}")
+        safe_rmtree_and_make(path_model)
+        os.makedirs(os.path.join(path_model, "full", "A"), exist_ok=True)
 
-    safe_rmtree_and_make(path_model)
-    safe_rmtree_and_make(path_pix)
-    make_output_dirs(path_model, path_pix)
+        PATH_OUTPUT_MASK = os.path.join(OUT_ROOT, "masks")
+        safe_rmtree_and_make(PATH_OUTPUT_MASK)
 
-    global PATH_OUTPUT_MASK
+        # Slice generation (MR only)
+        for pid, mr_p, mask_p in tqdm(patients, desc="Creating slices"):
+            create_slices_mr_only(pid, mr_p, path_model, mask_p)
 
-    PATH_OUTPUT_MASK = os.path.join(OUT_ROOT, "masks")
-    safe_rmtree_and_make(PATH_OUTPUT_MASK)
+    else:
+        # Original paired mode for training
+        patients = []
+        for entry in tqdm(sorted(os.listdir(CT_ROOT)), desc="Discovering patients"):
+            patient_dir = os.path.join(CT_ROOT, entry)
+            if not os.path.isdir(patient_dir):
+                continue
 
-    # 3) slice generation (all patients)
-    for pid, ct_p, mr_p, mask_p in tqdm(patients):
-        create_slices_for_pair(pid, ct_p, mr_p, path_model, path_pix, mask_p)
+            # Filter by patient IDs if specified
+            if args.patient_ids and entry not in args.patient_ids:
+                continue
+
+            ct_path = find_ct_nifti_for_patient(patient_dir)
+            if ct_path is None:
+                continue
+
+            mr_path = find_mr_nifti_for_patient(MR_ROOT, entry)
+            if mr_path is None:
+                print(f"!WARNING! No MR found for patient {entry}, skipping")
+                continue
+
+            mask_path = find_slice_nifti_for_patient(SLICE_ROOT, entry)
+            if mask_path is None:
+                print(f"!WARNING! No mask slice found for patient {entry}, skipping")
+                continue
+
+            patients.append((entry, ct_path, mr_path, mask_path))
+
+        if not patients:
+            raise RuntimeError("No paired CT+MR patients found. Check CT_ROOT and MR_ROOT.")
+
+        print(f"Found {len(patients)} paired patients")
+
+        # Prepare output structure (no split here)
+        path_model = os.path.join(OUT_ROOT, f"model_{NN_INPUT_MODE}")
+        path_pix = os.path.join(OUT_ROOT, f"pix2pix_{NN_INPUT_MODE}")
+
+        safe_rmtree_and_make(path_model)
+        safe_rmtree_and_make(path_pix)
+        make_output_dirs(path_model, path_pix)
+
+        PATH_OUTPUT_MASK = os.path.join(OUT_ROOT, "masks")
+        safe_rmtree_and_make(PATH_OUTPUT_MASK)
+
+        # Slice generation (all patients)
+        for pid, ct_p, mr_p, mask_p in tqdm(patients, desc="Creating slices"):
+            create_slices_for_pair(pid, ct_p, mr_p, path_model, path_pix, mask_p)
 
     print("Finished slice creation.")
 

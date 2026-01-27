@@ -1,3 +1,4 @@
+import argparse
 import numpy as np
 import SimpleITK as sitk
 from pathlib import Path
@@ -189,6 +190,7 @@ def process_image(
     mask_path: Path = None,
     save_mask: bool = False,
     mask_out_path: Path = None,
+    crop_to_mask: bool = True,
 ):
     """
     Load NIfTI from in_path, center crop/pad x/y to TARGET_SIZE_XY,
@@ -200,13 +202,17 @@ def process_image(
 
     body_part = in_path.name.split("_")[0]
 
-    # crop image to bbox of mask (smallest possible X/Y space without cropping mask)
-    cropped_img, cropped_mask = crop_img_to_mask_bbox(
-        img,
-        mask_img,
-        background=background,
-        target_xy=TARGET_SIZE_XY,
-    )
+    if crop_to_mask:
+        # crop image to bbox of mask (smallest possible X/Y space without cropping mask)
+        cropped_img, cropped_mask = crop_img_to_mask_bbox(
+            img,
+            mask_img,
+            background=background,
+            target_xy=TARGET_SIZE_XY,
+        )
+    else:
+        cropped_img = img
+        cropped_mask = mask_img
 
     # bring to correct final output size by padding and then cropping
     arr_img, new_spacing = crop_pad_xy(
@@ -273,45 +279,140 @@ def make_out_name(in_path: Path) -> str:
     return f"{base}_cp{TARGET_SIZE_XY}{suffix}"
 
 
-def process_case(case_dir: Path, out_root: Path):
+def process_case(case_dir: Path, out_root: Path, mr_only: bool = False, crop_to_mask: bool = True):
     """
     case_dir structure (current):
       case_dir/
         CT_reg/*.nii.gz
         MR/*.nii.gz
-        new_masks/*.nii.gz   (optional)
+        new_masks/*.nii.gz   (optional, can also be in 'masks/' folder)
 
     Output:
-      out_root/case_id/CT_reg/<ct_name>_cp256.nii[.gz]
+      out_root/case_id/CT_reg/<ct_name>_cp256.nii[.gz]  (skipped if mr_only)
       out_root/case_id/MR/<mr_name>_cp256.nii[.gz]
       out_root/case_id/new_masks/<mask_name>_cp256.nii[.gz]
+
+    Args:
+        case_dir: Input case directory
+        out_root: Output root directory
+        mr_only: If True, skip CT processing (for inference)
+        crop_to_mask: If True, crop to mask bounding box (default training behavior)
     """
     case_id = case_dir.name
 
     ct_in = get_first_nifti(case_dir / "CT_reg")
     mr_in = get_first_nifti(case_dir / "MR")
+    # Check both 'new_masks' and 'masks' folders for backward compatibility
     mask_in = get_first_nifti(case_dir / "new_masks")
+    if mask_in is None:
+        mask_in = get_first_nifti(case_dir / "masks")
 
-    if ct_in is None or mr_in is None:
-        print(f"[SKIP] {case_id}: missing CT_reg or MR")
+    # Check requirements based on mode
+    if not mr_only and ct_in is None:
+        print(f"[SKIP] {case_id}: missing CT_reg (use --mr-only for inference)")
+        return
+
+    if mr_in is None:
+        print(f"[SKIP] {case_id}: missing MR")
+        return
+
+    if mask_in is None:
+        print(f"[SKIP] {case_id}: missing mask (new_masks or masks folder)")
         return
 
     out_case = out_root / case_id
 
-    ct_out = out_case / "CT_reg" / make_out_name(ct_in)
+    # Process CT only if not in MR-only mode
+    if not mr_only and ct_in is not None:
+        ct_out = out_case / "CT_reg" / make_out_name(ct_in)
+        process_image(ct_in, ct_out, CT_BACKGROUND, mask_path=mask_in,
+                      save_mask=False, crop_to_mask=crop_to_mask)
+
+    # Always process MR
     mr_out = out_case / "MR" / make_out_name(mr_in)
     mask_out = out_case / "new_masks" / make_out_name(mask_in)
+    process_image(mr_in, mr_out, MR_BACKGROUND, mask_path=mask_in,
+                  save_mask=True, mask_out_path=mask_out, crop_to_mask=crop_to_mask)
 
-    # Process CT and MR with mask applied (if available)
-    process_image(ct_in, ct_out, CT_BACKGROUND, mask_path=mask_in, save_mask=False)
-    process_image(mr_in, mr_out, MR_BACKGROUND, mask_path=mask_in, save_mask=True, mask_out_path=mask_out)
+
+def parse_args():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Resample NIfTI volumes to target size with optional mask cropping.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    # Original behavior (training data preprocessing):
+    python 20resampling.py
+
+    # Inference mode (MR only, no crop to bbox):
+    python 20resampling.py --mr-only --skip-crop-to-bbox \\
+        --src-root /path/to/input/1initNifti \\
+        --out-root /path/to/output/2resampledNifti
+
+    # Process specific patients:
+    python 20resampling.py --patient-ids AB_1ABA005 AB_1ABA006
+        """
+    )
+
+    parser.add_argument(
+        "--src-root", type=str, default=None,
+        help=f"Source directory (default: {src_root})"
+    )
+    parser.add_argument(
+        "--out-root", type=str, default=None,
+        help=f"Output directory (default: {out_path})"
+    )
+    parser.add_argument(
+        "--mr-only", action="store_true",
+        help="Process MR only, skip CT requirement (for inference)"
+    )
+    parser.add_argument(
+        "--skip-crop-to-bbox", action="store_true",
+        help="Skip crop to mask bounding box (use center crop/pad instead)"
+    )
+    parser.add_argument(
+        "--patient-ids", nargs="+", default=None,
+        help="Specific patient IDs to process (default: all)"
+    )
+
+    return parser.parse_args()
 
 
 def main():
-    print("Starting resampling...")
-    for case_dir in tqdm(sorted(src_root.iterdir())):
-        if case_dir.is_dir():
-            process_case(case_dir, out_path)
+    args = parse_args()
+
+    # Use command line args or defaults
+    input_root = Path(args.src_root) if args.src_root else src_root
+    output_root = Path(args.out_root) if args.out_root else out_path
+    mr_only = args.mr_only
+    crop_to_mask = not args.skip_crop_to_bbox
+
+    print("=" * 60)
+    print("Resampling NIfTI volumes")
+    print("=" * 60)
+    print(f"Source:          {input_root}")
+    print(f"Output:          {output_root}")
+    print(f"MR only:         {mr_only}")
+    print(f"Crop to mask:    {crop_to_mask}")
+    print(f"Target size XY:  {TARGET_SIZE_XY}")
+    print("=" * 60)
+
+    # Get case directories
+    if args.patient_ids:
+        case_dirs = [input_root / pid for pid in args.patient_ids if (input_root / pid).is_dir()]
+        if not case_dirs:
+            print(f"[ERROR] No valid patient directories found for: {args.patient_ids}")
+            return
+    else:
+        case_dirs = [d for d in sorted(input_root.iterdir()) if d.is_dir()]
+
+    print(f"Processing {len(case_dirs)} cases...")
+
+    for case_dir in tqdm(case_dirs):
+        process_case(case_dir, output_root, mr_only=mr_only, crop_to_mask=crop_to_mask)
+
+    print("Resampling complete.")
 
 
 if __name__ == "__main__":
