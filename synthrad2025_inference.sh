@@ -21,10 +21,9 @@
 #   # Specify GPU:
 #   ./synthrad2025_inference.sh --gpu 1
 #
-#   # Custom paths:
+#   # Custom temp directory:
 #   ./synthrad2025_inference.sh \
-#       --input-dir /path/to/1initNifti \
-#       --output-dir /path/to/output \
+#       --output-dir /path/to/temp \
 #       --gpu 0
 #
 #   # Process specific patients:
@@ -50,7 +49,6 @@ MODEL_ENV="inference_env_docker"
 # Default values (can be overridden via command line)
 GC_INPUT_DIR="/local/scratch/datasets/FullbodySCT/nicolas_test_pipeline/input"
 GC_OUTPUT_DIR="/local/scratch/datasets/FullbodySCT/nicolas_test_pipeline/output"
-INPUT_DIR="/local/scratch/datasets/FullbodySCT/nicolas_test_pipeline/temp/1initNifti"
 OUTPUT_DIR="/local/scratch/datasets/FullbodySCT/nicolas_test_pipeline/temp"
 CHECKPOINT_DIR="/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/8checkpoints"
 MODEL_NAME="cut_synthrad_allregions_final"
@@ -71,10 +69,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --gc-output)
             GC_OUTPUT_DIR="$2"
-            shift 2
-            ;;
-        --input-dir)
-            INPUT_DIR="$2"
             shift 2
             ;;
         --output-dir)
@@ -130,9 +124,7 @@ while [[ $# -gt 0 ]]; do
             echo "                            Default: $GC_INPUT_DIR"
             echo "  --gc-output DIR           Grand Challenge output directory"
             echo "                            Default: $GC_OUTPUT_DIR"
-            echo "  --input-dir DIR           Input directory (1initNifti format)"
-            echo "                            Default: $INPUT_DIR"
-            echo "  --output-dir DIR          Output directory"
+            echo "  --output-dir DIR          Temp/working directory"
             echo "                            Default: $OUTPUT_DIR"
             echo "  --checkpoint-dir DIR      Checkpoint directory"
             echo "                            Default: $CHECKPOINT_DIR"
@@ -160,8 +152,8 @@ while [[ $# -gt 0 ]]; do
             echo "  # Process specific patient:"
             echo "  $0 --patient-ids AB_1ABA005"
             echo ""
-            echo "  # Custom input/output:"
-            echo "  $0 --input-dir /my/input --output-dir /my/output --gpu 0"
+            echo "  # Custom temp directory:"
+            echo "  $0 --output-dir /my/temp --gpu 0"
             exit 0
             ;;
         *)
@@ -173,6 +165,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Derived paths
+INPUT_DIR="${OUTPUT_DIR}/1initNifti"
 PREPROC_SCRIPTS="${SCRIPT_DIR}/preprocessing/preprocessing_synthrad"
 TRAINING_DIR="${SCRIPT_DIR}/training_cut"
 
@@ -198,8 +191,7 @@ echo "MR-to-CT Synthesis Inference Pipeline"
 echo "======================================================================"
 echo "GC Input:        ${GC_INPUT_DIR}"
 echo "GC Output:       ${GC_OUTPUT_DIR}"
-echo "Input:           ${INPUT_DIR}"
-echo "Output:          ${OUTPUT_DIR}"
+echo "Temp dir:        ${OUTPUT_DIR}"
 echo "Checkpoint dir:  ${CHECKPOINT_DIR}"
 echo "Model:           ${MODEL_NAME}"
 echo "Epoch:           ${EPOCH}"
@@ -244,13 +236,20 @@ mkdir -p "${DIR_RESAMPLED}" "${DIR_NORMALIZED}" "${DIR_SLICES}" "${DIR_INFERENCE
 # =========================================================================
 
 run_step() {
+    local show_cmd=true
+    if [[ "$1" == "--no-cmd" ]]; then
+        show_cmd=false
+        shift
+    fi
     local step_name="$1"
     shift
     echo ""
     echo "======================================================================"
     echo "STEP: ${step_name}"
     echo "======================================================================"
-    echo "Command: $*"
+    if [[ "${show_cmd}" == true ]]; then
+        echo "Command: $*"
+    fi
     echo ""
 
     "$@"
@@ -264,7 +263,7 @@ run_step() {
 # STEP 0: PREPARE INPUT DATA (GC format -> 1initNifti)
 # =========================================================================
 
-run_step "0. Preparing input data" \
+run_step --no-cmd "0. Preparing input data" \
     python3 -c "
 import json, shutil, os, sys
 
@@ -464,7 +463,7 @@ fi
 # STEP 6: COPY RESULTS TO OUTPUT (10reconstruction -> GC output)
 # =========================================================================
 
-run_step "6. Copying results to output" \
+run_step --no-cmd "6. Copying results to output" \
     python3 -c "
 import json, shutil, os, sys
 
