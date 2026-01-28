@@ -94,11 +94,12 @@ def parse_nifti_slice_filename(filename: str):
     Example:
     - AB_1ABA009_38.nii
     - HN_1HNAxxx_5.nii
+    - AB_001_38.nii  (generic format)
     - *.nii.gz supported
 
     Returns: (patient_id, slice_num) or None
     """
-    pattern = r'^([A-Za-z]+_\d[A-Z]{1,3}(?:\d{2,3}|xxx))_(\d+)\.nii(\.gz)?$'
+    pattern = r'^(.+)_(\d+)\.nii(\.gz)?$'
     match = re.match(pattern, filename)
 
     if not match:
