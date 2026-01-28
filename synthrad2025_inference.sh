@@ -299,7 +299,7 @@ mri_files = sorted(
 )
 if not mri_files:
     print(f'ERROR: No image files found in {mri_dir}')
-        sys.exit(1)
+    sys.exit(1)
 
 # Discover body mask files (optional, matched to MRI files by sorted index)
 body_dir = os.path.join(gc_input, 'images', 'body')
@@ -505,10 +505,10 @@ os.makedirs(output_dir, exist_ok=True)
 case_results = []
 
 for patient_id, original_basename in sorted(input_mapping.items()):
-        src = os.path.join(reconstruction_dir, patient_id, 'sCT_original_dim_reconstructed_alignment.nii.gz')
-        if not os.path.exists(src):
-            print(f'ERROR: Reconstructed file not found: {src}')
-            sys.exit(1)
+    src = os.path.join(reconstruction_dir, patient_id, 'sCT_original_dim_reconstructed_alignment.nii.gz')
+    if not os.path.exists(src):
+        print(f'ERROR: Reconstructed file not found: {src}')
+        sys.exit(1)
 
     # Output uses the original filename (preserving .mha / .nii / .nii.gz)
     output_path = os.path.join(output_dir, original_basename)

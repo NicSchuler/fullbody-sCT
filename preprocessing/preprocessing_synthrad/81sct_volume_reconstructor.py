@@ -111,6 +111,26 @@ def parse_nifti_slice_filename(filename: str):
     return patient_id, slice_num
 
 
+def find_resampled_mask(patient_id: str, resampled_dir: Path = None) -> Path:
+    """
+    Find the body mask in 2resampledNifti/new_masks for the given patient.
+
+    Searches for: 2resampledNifti/{patient_id}/new_masks/*.nii.gz
+
+    Args:
+        patient_id: Patient identifier
+        resampled_dir: Optional custom resampled directory (default: RESAMPLED_DIR)
+    """
+    _resampled_dir = resampled_dir if resampled_dir is not None else RESAMPLED_DIR
+    mask_dir = _resampled_dir / patient_id / "new_masks"
+    if mask_dir.exists():
+        for pattern in ("*.nii.gz", "*.nii"):
+            files = sorted(mask_dir.glob(pattern))
+            if files:
+                return files[0]
+    return None
+
+
 def find_resampled_ct(patient_id: str, resampled_dir: Path = None) -> Path:
     """
     Find the CT volume in 2resampledNifti for reference affine.
@@ -336,6 +356,25 @@ def process_patient(
         if resampled_result is None:
             success = False
         else:
+            # Apply body mask in the canonical 256-dimension space before reversing resampling
+            mask_path = find_resampled_mask(patient_id, resampled_dir)
+            if mask_path is not None:
+                try:
+                    mask_img = nib.load(mask_path)
+                    mask_data = mask_img.get_fdata().astype(np.float32)
+                    vol_data = resampled_result.get_fdata().astype(np.float32)
+                    # If mask has exactly 2 more slices than the volume, crop first and last slice
+                    if mask_data.shape[2] == vol_data.shape[2] + 2:
+                        print(f"  Mask has 2 extra slices ({mask_data.shape[2]} vs {vol_data.shape[2]}), cropping first and last")
+                        mask_data = mask_data[:, :, 1:-1]
+                    vol_data[mask_data == 0] = -1024
+                    resampled_result = nib.Nifti1Image(vol_data, resampled_result.affine, resampled_result.header)
+                    print(f"  Applied mask from {mask_path.name}")
+                except Exception as e:
+                    print(f"  !WARNING! Could not apply mask for {patient_id}: {e}")
+            else:
+                print(f"  !WARNING! No mask found in new_masks for {patient_id}, skipping masking")
+
             # Create original dimension version by reversing resampling
             try:
                 original_result = reverse_resample_to_original(
