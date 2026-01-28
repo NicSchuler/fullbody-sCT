@@ -1,0 +1,7 @@
+evalutils==0.3.1
+SimpleITK
+scikit-learn
+#torch # Uncomment if you want to use PyTorch
+numpy
+scipy
+python-dotenv
