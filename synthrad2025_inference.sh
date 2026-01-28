@@ -212,11 +212,6 @@ if [[ ! -d "${GC_INPUT_DIR}" ]]; then
     exit 1
 fi
 
-if [[ ! -f "${GC_INPUT_DIR}/expected_output.json" ]]; then
-    echo "ERROR: expected_output.json not found in: ${GC_INPUT_DIR}"
-    exit 1
-fi
-
 if [[ ! -f "${GC_INPUT_DIR}/region.json" ]]; then
     echo "ERROR: region.json not found in: ${GC_INPUT_DIR}"
     exit 1
@@ -264,11 +259,20 @@ run_step() {
 # =========================================================================
 
 run_step --no-cmd "0. Preparing input data" \
-    python3 -c "
-import json, shutil, os, sys
+    conda run -n "${PREPROC_ENV}" python -c "
+import json, shutil, os, sys, glob
+import SimpleITK as sitk
 
 gc_input = sys.argv[1]
 init_dir = sys.argv[2]
+
+def convert_to_nii_gz(src, dst):
+    \"\"\"Copy if already .nii.gz, otherwise convert via SimpleITK.\"\"\"
+    if src.endswith('.nii.gz'):
+        shutil.copy2(src, dst)
+    else:
+        img = sitk.ReadImage(src)
+        sitk.WriteImage(img, dst)
 
 # Read region
 with open(os.path.join(gc_input, 'region.json')) as f:
@@ -282,27 +286,39 @@ if not prefix:
 
 print(f'Region: {region} -> Prefix: {prefix}')
 
-# Read expected_output.json
-with open(os.path.join(gc_input, 'expected_output.json')) as f:
-    entries = json.load(f)
+# Discover MRI files from input/images/mri/ (.nii.gz, .nii, .mha)
+mri_dir = os.path.join(gc_input, 'images', 'mri')
+if not os.path.isdir(mri_dir):
+    print(f'ERROR: MRI directory not found: {mri_dir}')
+    sys.exit(1)
 
-for entry in entries:
-    mri_rel = None
-    body_rel = None
-    for inp in entry.get('inputs', []):
-        if '/mri/' in inp['filename']:
-            mri_rel = inp['filename']
-        elif '/body/' in inp['filename']:
-            body_rel = inp['filename']
-
-    if not mri_rel:
-        print('ERROR: No MRI input found in expected_output.json')
+mri_files = sorted(
+    glob.glob(os.path.join(mri_dir, '*.nii.gz'))
+    + glob.glob(os.path.join(mri_dir, '*.nii'))
+    + glob.glob(os.path.join(mri_dir, '*.mha'))
+)
+if not mri_files:
+    print(f'ERROR: No image files found in {mri_dir}')
         sys.exit(1)
 
-    # Extract stem from filename (e.g., '1HNAxxx' from '/input/images/mri/1HNAxxx.nii.gz')
-    basename = os.path.basename(mri_rel)
-    stem = basename.replace('.nii.gz', '') if basename.endswith('.nii.gz') else basename.replace('.nii', '')
-    patient_id = f'{prefix}_{stem}'
+# Discover body mask files (optional, matched to MRI files by sorted index)
+body_dir = os.path.join(gc_input, 'images', 'body')
+body_files = []
+if os.path.isdir(body_dir):
+    body_files = sorted(
+        glob.glob(os.path.join(body_dir, '*.nii.gz'))
+        + glob.glob(os.path.join(body_dir, '*.nii'))
+        + glob.glob(os.path.join(body_dir, '*.mha'))
+    )
+
+# Mapping: patient_id -> original MRI filename (to restore format in Step 6)
+input_mapping = {}
+
+for idx, mri_path in enumerate(mri_files):
+    basename = os.path.basename(mri_path)
+    patient_id = f'{prefix}_{idx + 1:03d}'
+
+    input_mapping[patient_id] = basename
 
     # Create directory structure
     mr_dir = os.path.join(init_dir, patient_id, 'MR')
@@ -310,18 +326,22 @@ for entry in entries:
     os.makedirs(mr_dir, exist_ok=True)
     os.makedirs(mask_dir, exist_ok=True)
 
-    # Copy MRI: /input/images/mri/X.nii.gz -> 1initNifti/{PREFIX}_{STEM}/MR/{PREFIX}_{STEM}_MR.nii.gz
-    src_mri = gc_input + mri_rel[len('/input'):]
+    # Copy/convert MRI to .nii.gz
     dst_mri = os.path.join(mr_dir, f'{patient_id}_MR.nii.gz')
-    shutil.copy2(src_mri, dst_mri)
-    print(f'  MRI:  {src_mri} -> {dst_mri}')
+    convert_to_nii_gz(mri_path, dst_mri)
+    print(f'  MRI:  {mri_path} -> {dst_mri}')
 
-    # Copy body mask if available
-    if body_rel:
-        src_body = gc_input + body_rel[len('/input'):]
+    # Copy/convert body mask if available (matched by sorted index)
+    if idx < len(body_files):
         dst_body = os.path.join(mask_dir, f'{patient_id}_mask.nii.gz')
-        shutil.copy2(src_body, dst_body)
-        print(f'  Mask: {src_body} -> {dst_body}')
+        convert_to_nii_gz(body_files[idx], dst_body)
+        print(f'  Mask: {body_files[idx]} -> {dst_body}')
+
+# Save mapping for Step 6
+mapping_path = os.path.join(init_dir, 'input_mapping.json')
+with open(mapping_path, 'w') as f:
+    json.dump(input_mapping, f)
+print(f'  Mapping saved to {mapping_path}')
 " "${GC_INPUT_DIR}" "${INPUT_DIR}"
 
 # =========================================================================
@@ -464,57 +484,62 @@ fi
 # =========================================================================
 
 run_step --no-cmd "6. Copying results to output" \
-    python3 -c "
+    conda run -n "${PREPROC_ENV}" python -c "
 import json, shutil, os, sys
+import SimpleITK as sitk
 
 gc_input = sys.argv[1]
 gc_output = sys.argv[2]
 reconstruction_dir = sys.argv[3]
+init_dir = sys.argv[4]
 
-# Read region for prefix
-with open(os.path.join(gc_input, 'region.json')) as f:
-    region = json.load(f)
+# Read input mapping (patient_id -> original filename) saved in Step 0
+mapping_path = os.path.join(init_dir, 'input_mapping.json')
+with open(mapping_path) as f:
+    input_mapping = json.load(f)
 
-prefix_map = {'Head and Neck': 'HN', 'Abdomen': 'AB', 'Thorax': 'TH'}
-prefix = prefix_map.get(region)
-if not prefix:
-    print(f'ERROR: Unknown region: {region}')
-    sys.exit(1)
+# Output goes to {gc_output}/images/synthetic-ct/{original_filename}
+output_dir = os.path.join(gc_output, 'images', 'synthetic-ct')
+os.makedirs(output_dir, exist_ok=True)
 
-# Read expected_output.json
-with open(os.path.join(gc_input, 'expected_output.json')) as f:
-    entries = json.load(f)
+case_results = []
 
-for entry in entries:
-    # Find MRI input to derive patient ID
-    mri_rel = None
-    for inp in entry.get('inputs', []):
-        if '/mri/' in inp['filename']:
-            mri_rel = inp['filename']
-            break
-
-    if not mri_rel:
-        print('ERROR: No MRI input found in expected_output.json')
-        sys.exit(1)
-
-    basename = os.path.basename(mri_rel)
-    stem = basename.replace('.nii.gz', '') if basename.endswith('.nii.gz') else basename.replace('.nii', '')
-    patient_id = f'{prefix}_{stem}'
-
-    # Find output path(s) and copy reconstructed sCT
-    for out in entry.get('outputs', []):
-        output_rel = out['filename']  # e.g., /output/images/synthetic-ct/1HNAxxx.nii.gz
-        output_path = gc_output + output_rel[len('/output'):]
-
+for patient_id, original_basename in sorted(input_mapping.items()):
         src = os.path.join(reconstruction_dir, patient_id, 'sCT_original_dim_reconstructed_alignment.nii.gz')
         if not os.path.exists(src):
             print(f'ERROR: Reconstructed file not found: {src}')
             sys.exit(1)
 
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    # Output uses the original filename (preserving .mha / .nii / .nii.gz)
+    output_path = os.path.join(output_dir, original_basename)
+
+    if original_basename.endswith('.nii.gz'):
         shutil.copy2(src, output_path)
+    else:
+        # Convert from .nii.gz back to original format (.mha, .nii)
+        img = sitk.ReadImage(src)
+        # Strip NIfTI-specific metadata that MetaImage format does not support
+        for key in ['ITK_FileNotes', 'aux_file', 'descrip', 'intent_name']:
+            if img.HasMetaDataKey(key):
+                img.EraseMetaData(key)
+        sitk.WriteImage(img, output_path)
+
         print(f'  {src} -> {output_path}')
-" "${GC_INPUT_DIR}" "${GC_OUTPUT_DIR}" "${DIR_RECONSTRUCTION}"
+
+    case_results.append({
+        'outputs': [{'type': 'metaio_image', 'filename': output_path}],
+        'inputs': [
+            {'type': 'metaio_image', 'filename': os.path.join(gc_input, 'images', 'mri', original_basename)},
+        ],
+        'error_messages': [],
+    })
+
+# Write results.json
+results_path = os.path.join(gc_output, 'results.json')
+with open(results_path, 'w') as f:
+    json.dump(case_results, f)
+print(f'  Results written to {results_path}')
+" "${GC_INPUT_DIR}" "${GC_OUTPUT_DIR}" "${DIR_RECONSTRUCTION}" "${INPUT_DIR}"
 
 # =========================================================================
 # SUMMARY
