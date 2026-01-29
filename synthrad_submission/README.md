@@ -41,12 +41,12 @@
 ```ps
 # build container
 docker build `
-  -t docker_name `
-  -f C:\Users\nicol\Coding\UZH\fullbody-sCT\algorithm_template\Dockerfile `
+  -t cut_synthrad_allregions_final6 `
+  -f C:\Users\nicol\Coding\UZH\fullbody-sCT\synthrad_submission\Dockerfile `
   --build-arg IMAGE_VERSION=$(Get-Date -Format yyyyMMddHHmmss) `
   C:\Users\nicol\Coding\UZH\fullbody-sCT
 
-# docker build -t cut_synthrad_allregions_final -f C:\Users\nicol\Coding\UZH\fullbody-sCT\algorithm_template\Dockerfile C:\Users\nicol\Coding\UZH\fullbody-sCT
+# docker build -t cut_synthrad_allregions_final -f C:\Users\nicol\Coding\UZH\fullbody-sCT\synthrad_submission\Dockerfile C:\Users\nicol\Coding\UZH\fullbody-sCT
 
 # run testing
 $VOLUME_SUFFIX = (New-Guid).ToString().Substring(0,8)
@@ -61,10 +61,10 @@ docker run --rm `
     --pids-limit="256" `
     -v C:\Users\nicol\Coding\UZH\fullbody-sCT\data\input:/input `
     -v synthrad_algorithm-output-${VOLUME_SUFFIX}:/output/ `
-    docker_name
+    cut_synthrad_allregions_final6
 
 # export image
-docker save docker_name -o IMAGE.tar
+docker save cut_synthrad_allregions_final6 -o IMAGE.tar
 wsl gzip -9 IMAGE.tar
 ```
 

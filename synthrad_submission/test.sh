@@ -51,6 +51,6 @@ docker run --rm `
     --security-opt="no-new-privileges" `
     --shm-size="128m" `
     --pids-limit="256" `
-    -v C:\Users\nicol\Coding\UZH\fullbody-sCT\algorithm_template\test:/input `
+    -v C:\Users\nicol\Coding\UZH\fullbody-sCT\synthrad_submission\test:/input `
     -v synthrad_algorithm-output-${VOLUME_SUFFIX}:/output/ `
     cut_synthrad_allregions_final

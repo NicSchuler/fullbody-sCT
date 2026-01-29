@@ -2,7 +2,7 @@
 # SynthRAD2025 Grand Challenge - MR-to-CT Synthesis Docker Container
 #
 # Build context: repository root (fullbody-sCT/)
-# Build command: docker build -t synthrad_algorithm -f algorithm_template/Dockerfile .
+# Build command: docker build -t synthrad_algorithm -f synthrad_submission/Dockerfile .
 # =============================================================================
 
 FROM condaforge/miniforge3:latest
@@ -69,7 +69,7 @@ COPY --chown=algorithm:algorithm \
 # ---------------------------------------------------------------------------
 
 COPY --chown=algorithm:algorithm synthrad2025_inference.sh /opt/algorithm/
-COPY --chown=algorithm:algorithm algorithm_template/docker_entrypoint.sh /opt/algorithm/
+COPY --chown=algorithm:algorithm synthrad_submission/docker_entrypoint.sh /opt/algorithm/
 
 # Fix Windows CRLF line endings and set executable
 RUN sed -i 's/\r$//' /opt/algorithm/synthrad2025_inference.sh \

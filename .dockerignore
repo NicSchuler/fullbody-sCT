@@ -4,10 +4,10 @@ data/output/
 data/temp/
 notebooks/
 images/
-algorithm_template/test/
-algorithm_template/validation/
-algorithm_template/setup/
-algorithm_template/.github/
+synthrad_submission/test/
+synthrad_submission/validation/
+synthrad_submission/setup/
+synthrad_submission/.github/
 totalsegmentator/
 **/__pycache__/
 *.pyc

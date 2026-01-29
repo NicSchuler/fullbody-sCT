@@ -524,7 +524,7 @@ for patient_id, original_basename in sorted(input_mapping.items()):
                 img.EraseMetaData(key)
         sitk.WriteImage(img, output_path)
 
-        print(f'  {src} -> {output_path}')
+    print(f'  {src} -> {output_path}')
 
     case_results.append({
         'outputs': [{'type': 'metaio_image', 'filename': output_path}],
