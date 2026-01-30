@@ -51,10 +51,10 @@ GC_INPUT_DIR="/local/scratch/datasets/FullbodySCT/nicolas_test_pipeline/input"
 GC_OUTPUT_DIR="/local/scratch/datasets/FullbodySCT/nicolas_test_pipeline/output"
 OUTPUT_DIR="/local/scratch/datasets/FullbodySCT/nicolas_test_pipeline/temp"
 CHECKPOINT_DIR="/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/8checkpoints"
-MODEL_TYPE="pix2pix"
+MODEL_TYPE="cycleGAN"
 BODYREGION_TYPE="allregions"
 EPOCH="50"
-GPU="1"
+GPU="4"
 NORMALIZATION="31baseline"
 PATIENT_IDS=()
 SKIP_PREPROCESSING=false
@@ -373,19 +373,16 @@ if [[ "${SKIP_INFERENCE}" == false ]]; then
                 env CUDA_VISIBLE_DEVICES="${GPU}" \
                 conda run -n "${MODEL_ENV}" python \
                     "${PGAN_TRAINING_DIR}/inference_synth.py" \
+                    --phase test \
                     --dataroot "${PIX2PIX_DATAROOT}" \
                     --name "${MODEL_NAME}" \
                     --checkpoints_dir "${CHECKPOINT_DIR}" \
-                    --epoch "${EPOCH}" \
-                    --results_dir "${DIR_INFERENCE}" \
                     --model pix2pix \
-                    --netG unet_256 \
+                    --direction AtoB \
                     --input_nc 1 \
                     --output_nc 1 \
-                    --preprocess none \
-                    --no_flip \
-                    --direction AtoB \
-                    --eval
+                    --results_dir "${DIR_INFERENCE}" \
+                    --epoch "${EPOCH}"
             ;;
         cycleGAN)
             PGAN_TRAINING_DIR="${SCRIPT_DIR}/training"
