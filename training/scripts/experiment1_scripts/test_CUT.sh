@@ -1,4 +1,6 @@
 
+cd ../../../training_cut
+
 CUDA_VISIBLE_DEVICES=3 python test_synth.py \
  --dataroot '/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/6materialized_splits_31baseline/cyclegan/test' \
  --checkpoints_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/8checkpoints \
@@ -12,7 +14,6 @@ CUDA_VISIBLE_DEVICES=3 python test_synth.py \
  --epoch 50
 
 
-# Fullbody CUT model evaluated per body part (epoch 50)
 CUDA_VISIBLE_DEVICES=3 python test_synth.py \
  --dataroot '/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/7materialized_splits_31baselineBodyRegion/AB/cyclegan/test' \
  --checkpoints_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/8checkpoints \
@@ -26,7 +27,7 @@ CUDA_VISIBLE_DEVICES=3 python test_synth.py \
  --epoch 50
 
 
-CUDA_VISIBLE_DEVICES=4 python test_synth.py \
+CUDA_VISIBLE_DEVICES=3 python test_synth.py \
  --dataroot '/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/7materialized_splits_31baselineBodyRegion/brain/cyclegan/test' \
  --checkpoints_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/8checkpoints \
  --phase test \

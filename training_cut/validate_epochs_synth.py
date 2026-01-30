@@ -76,7 +76,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from training.scripts.synthrad25scripts.metrics_synth import (
-    structural_similarity_index,
+    structural_similarity_index_skimage,
     peak_signal_to_noise_ratio,
     mean_absolute_error,
     mean_squared_error,
@@ -235,7 +235,13 @@ if __name__ == "__main__":
             mae = mean_absolute_error(real_ct_numpy, fake_ct_numpy, mask)
             mse = mean_squared_error(real_ct_numpy, fake_ct_numpy, mask)
             psnr = peak_signal_to_noise_ratio(real_ct_numpy, fake_ct_numpy, mask)
-            ssim = structural_similarity_index(real_ct_numpy, fake_ct_numpy)
+            fake_norm_01 = (fake_norm + 1) / 2
+            _, ssim = structural_similarity_index_skimage(
+                real_ct_nii_array,
+                fake_norm_01,
+                mask,
+                data_range=1.0,
+            )
 
             res.append([mae, mse, psnr, ssim])
 

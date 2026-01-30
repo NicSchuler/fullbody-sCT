@@ -42,7 +42,12 @@ for _ in range(8):
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from training.scripts.synthrad25scripts.metrics_synth import structural_similarity_index, peak_signal_to_noise_ratio, mean_absolute_error, mean_squared_error
+from training.scripts.synthrad25scripts.metrics_synth import (
+    structural_similarity_index_skimage,
+    peak_signal_to_noise_ratio,
+    mean_absolute_error,
+    mean_squared_error,
+)
 from training_cut.options.test_options import TestOptions
 from training.data import create_dataset
 from training_cut.models import create_model
@@ -162,11 +167,16 @@ if __name__ == '__main__':
                 print(f"Warning: Mask not found for {file_name}, skipping mask.")
 
         # compute metrics
-        mae = mean_absolute_error(real_ct_numpy, fake_ct_numpy,mask)
-        mse = mean_squared_error(real_ct_numpy, fake_ct_numpy,mask)
+        mae = mean_absolute_error(real_ct_numpy, fake_ct_numpy, mask)
+        mse = mean_squared_error(real_ct_numpy, fake_ct_numpy, mask)
         psnr = peak_signal_to_noise_ratio(real_ct_numpy, fake_ct_numpy, mask)
-        ssim = structural_similarity_index(real_ct_numpy, fake_ct_numpy, mask)
-
+        fake_norm_01 = (fake_norm + 1) / 2
+        _, ssim = structural_similarity_index_skimage(
+            real_ct_nii_array,
+            fake_norm_01,
+            mask,
+            data_range=1.0,
+        )
         res_test.append([file_name, mae, mse, psnr, ssim, mask_voxels])
 
 

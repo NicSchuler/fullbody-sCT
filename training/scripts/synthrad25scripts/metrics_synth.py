@@ -3,6 +3,7 @@ import torch
 import numpy as np
 import os
 import nibabel as nib
+from skimage.metrics import structural_similarity as ssim
 
 
 def mean_absolute_error(image_true, image_generated,slice_mask): # , arr_diff_numerical):
@@ -96,34 +97,10 @@ def peak_signal_to_noise_ratio(image_true, image_generated,slice_mask):
     return psnr
 
 
-def structural_similarity_index(image_true, image_generated, slice_mask=None, C1=0.01, C2=0.03):
-    """Compute structural similarity index.
-
-    Args:
-        image_true: (Tensor) true image
-        image_generated: (Tensor) generated image
-        slice_mask: (Tensor) optional mask for valid voxels
-        C1: (float) variable to stabilize the denominator
-        C2: (float) variable to stabilize the denominator
-
-    Returns:
-        ssim: (float) mean squared error"""
-
-    if slice_mask is None or slice_mask.shape != image_true.shape:
-        true_vals = image_true
-        gen_vals = image_generated
-    else:
-        true_vals = image_true[slice_mask != 0]
-        gen_vals = image_generated[slice_mask != 0]
-
-    mean_true = true_vals.mean()
-    mean_generated = gen_vals.mean()
-    std_true = true_vals.std()
-    std_generated = gen_vals.std()
-    covariance = (
-        (true_vals - mean_true) * (gen_vals - mean_generated)).mean()
-
-    numerator = (2 * mean_true * mean_generated + C1) * (2 * covariance + C2)
-    denominator = ((mean_true ** 2 + mean_generated ** 2 + C1) *
-                   (std_true ** 2 + std_generated ** 2 + C2))
-    return numerator / denominator
+def structural_similarity_index_skimage(image_true, image_generated, slice_mask=None, data_range=1.0):
+    """Compute structural similarity index using skimage, optionally masked."""
+    score, ssim_map = ssim(image_true, image_generated, data_range=data_range, full=True)
+    if slice_mask is None or slice_mask.shape != ssim_map.shape:
+        return float(score), float(ssim_map.mean())
+    masked_score = ssim_map[slice_mask != 0].mean()
+    return float(score), float(masked_score)

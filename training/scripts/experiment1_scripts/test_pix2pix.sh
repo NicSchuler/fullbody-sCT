@@ -1,4 +1,6 @@
 
+cd ../..
+
 #test abdomen
 CUDA_VISIBLE_DEVICES=3 python test_synth.py \
   --phase test \
@@ -13,10 +15,6 @@ CUDA_VISIBLE_DEVICES=3 python test_synth.py \
   --epoch 50
 
 
-
-
-
-
   CUDA_VISIBLE_DEVICES=3 python test_synth.py \
   --phase test \
   --dataroot /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/7materialized_splits_31baselineBodyRegion/brain/pix2pix/AB \
@@ -28,10 +26,6 @@ CUDA_VISIBLE_DEVICES=3 python test_synth.py \
   --output_nc 1 \
   --results_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/100results \
   --epoch 50
-
-
-
-
 
 CUDA_VISIBLE_DEVICES=3 python test_synth.py \
   --phase test \
@@ -46,8 +40,6 @@ CUDA_VISIBLE_DEVICES=3 python test_synth.py \
   --epoch 50
 
 
-
-
   CUDA_VISIBLE_DEVICES=3 python test_synth.py \
   --phase test \
   --dataroot /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/7materialized_splits_31baselineBodyRegion/pelvis/pix2pix/AB \
@@ -59,8 +51,6 @@ CUDA_VISIBLE_DEVICES=3 python test_synth.py \
   --output_nc 1 \
   --results_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/100results \
   --epoch 50
-
-
 
 CUDA_VISIBLE_DEVICES=3 python test_synth.py \
   --phase test \
@@ -74,12 +64,6 @@ CUDA_VISIBLE_DEVICES=3 python test_synth.py \
   --results_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/100results \
   --epoch 50
 
-
-
-
-
-
-
 CUDA_VISIBLE_DEVICES=3 python test_synth.py \
   --phase test \
   --dataroot /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/6materialized_splits_31baseline/pix2pix/AB \
@@ -90,82 +74,6 @@ CUDA_VISIBLE_DEVICES=3 python test_synth.py \
   --input_nc 1 \
   --output_nc 1 \
   --results_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/100results \
-  --epoch 50
-
-
-
-
-CUDA_VISIBLE_DEVICES=3 python test_synth.py \
-  --phase test \
-  --dataroot /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/7materialized_splits_31baselineBodyRegion/AB/pix2pix/AB \
-  --name pix2pix_synthrad_allregion_final \
-  --checkpoints_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/8checkpoints \
-  --model pix2pix \
-  --direction AtoB \
-  --input_nc 1 \
-  --output_nc 1 \
-  --results_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/100results/fullbody_model_AB \
-  --body_part AB \
-  --epoch 50
-
-
-
-CUDA_VISIBLE_DEVICES=3 python test_synth.py \
-  --phase test \
-  --dataroot /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/7materialized_splits_31baselineBodyRegion/brain/pix2pix/AB \
-  --name pix2pix_synthrad_allregion_final \
-  --checkpoints_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/8checkpoints \
-  --model pix2pix \
-  --direction AtoB \
-  --input_nc 1 \
-  --output_nc 1 \
-  --results_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/100results/fullbody_model_brain \
-  --body_part brain \
-  --epoch 50
-
-
-
-CUDA_VISIBLE_DEVICES=3 python test_synth.py \
-  --phase test \
-  --dataroot /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/7materialized_splits_31baselineBodyRegion/HN/pix2pix/AB \
-  --name pix2pix_synthrad_allregion_final \
-  --checkpoints_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/8checkpoints \
-  --model pix2pix \
-  --direction AtoB \
-  --input_nc 1 \
-  --output_nc 1 \
-  --results_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/100results/fullbody_model_HN \
-  --body_part HN \
-  --epoch 50
-
-
-
-CUDA_VISIBLE_DEVICES=3 python test_synth.py \
-  --phase test \
-  --dataroot /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/7materialized_splits_31baselineBodyRegion/pelvis/pix2pix/AB \
-  --name pix2pix_synthrad_allregion_final \
-  --checkpoints_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/8checkpoints \
-  --model pix2pix \
-  --direction AtoB \
-  --input_nc 1 \
-  --output_nc 1 \
-  --results_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/100results/fullbody_model_pelvis \
-  --body_part pelvis \
-  --epoch 50
-
-
-
-CUDA_VISIBLE_DEVICES=3 python test_synth.py \
-  --phase test \
-  --dataroot /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/7materialized_splits_31baselineBodyRegion/TH/pix2pix/AB \
-  --name pix2pix_synthrad_allregion_final \
-  --checkpoints_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/8checkpoints \
-  --model pix2pix \
-  --direction AtoB \
-  --input_nc 1 \
-  --output_nc 1 \
-  --results_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/100results/fullbody_model_TH \
-  --body_part TH \
   --epoch 50
 
 
