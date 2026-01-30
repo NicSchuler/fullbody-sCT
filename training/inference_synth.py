@@ -97,8 +97,8 @@ def main():
     opt.batch_size = 1
     opt.serial_batches = True
     opt.no_flip = True
-    opt.display_id = -1  # no visdom display
-    opt.phase = "test"
+    # opt.display_id = -1  # no visdom display
+    opt.device = 'cuda'
 
     # For pix2pix, use aligned mode with concatenated A|A pairs (MR duplicated)
     # This ensures the exact same data loading path as testing
@@ -110,7 +110,7 @@ def main():
         opt.dataset_mode = "single_nifti"
 
     # Set device (required by BaseModel)
-    opt.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    # opt.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # Determine model type for display
     model_type = opt.model.upper().replace("_", "")
