@@ -51,7 +51,7 @@ GC_INPUT_DIR="/local/scratch/datasets/FullbodySCT/nicolas_test_pipeline/input"
 GC_OUTPUT_DIR="/local/scratch/datasets/FullbodySCT/nicolas_test_pipeline/output"
 OUTPUT_DIR="/local/scratch/datasets/FullbodySCT/nicolas_test_pipeline/temp"
 CHECKPOINT_DIR="/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/8checkpoints"
-MODEL_TYPE="cycleGAN"
+MODEL_TYPE="pix2pix"
 BODYREGION_TYPE="allregions"
 EPOCH="50"
 GPU="1"
@@ -355,8 +355,37 @@ if [[ "${SKIP_INFERENCE}" == false ]]; then
                     --eval
             ;;
         pix2pix)
-            echo "ERROR: Not implemented MODEL_TYPE: ${MODEL_TYPE}"
-            exit 1
+            PGAN_TRAINING_DIR="${SCRIPT_DIR}/training"
+
+            # Pix2pix requires aligned (concatenated) data format
+            # Create A|A pairs (MR duplicated since we don't have CT)
+            # This ensures the exact same data loading path as testing
+            PIX2PIX_DATAROOT="${DIR_SLICES}/pix2pix_inference"
+            PIX2PIX_TEST_DIR="${PIX2PIX_DATAROOT}/test"
+
+            run_step "4a. Preparing pix2pix aligned data" \
+                conda run -n "${PREPROC_ENV}" python \
+                    "${PREPROC_SCRIPTS}/65combine_A_for_pix2pix_inference.py" \
+                    --input-dir "${SLICES_DIR}" \
+                    --output-dir "${PIX2PIX_TEST_DIR}"
+
+            run_step "4b. Running pix2pix model inference" \
+                env CUDA_VISIBLE_DEVICES="${GPU}" \
+                conda run -n "${MODEL_ENV}" python \
+                    "${PGAN_TRAINING_DIR}/inference_synth.py" \
+                    --dataroot "${PIX2PIX_DATAROOT}" \
+                    --name "${MODEL_NAME}" \
+                    --checkpoints_dir "${CHECKPOINT_DIR}" \
+                    --epoch "${EPOCH}" \
+                    --results_dir "${DIR_INFERENCE}" \
+                    --model pix2pix \
+                    --netG unet_256 \
+                    --input_nc 1 \
+                    --output_nc 1 \
+                    --preprocess none \
+                    --no_flip \
+                    --direction AtoB \
+                    --eval
             ;;
         cycleGAN)
             PGAN_TRAINING_DIR="${SCRIPT_DIR}/training"
