@@ -51,7 +51,7 @@ GC_INPUT_DIR="/local/scratch/datasets/FullbodySCT/nicolas_test_pipeline/input"
 GC_OUTPUT_DIR="/local/scratch/datasets/FullbodySCT/nicolas_test_pipeline/output"
 OUTPUT_DIR="/local/scratch/datasets/FullbodySCT/nicolas_test_pipeline/temp"
 CHECKPOINT_DIR="/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/8checkpoints"
-MODEL_TYPE="CUT"
+MODEL_TYPE="cycleGAN"
 BODYREGION_TYPE="allregions"
 EPOCH="50"
 GPU="1"
@@ -359,8 +359,25 @@ if [[ "${SKIP_INFERENCE}" == false ]]; then
             exit 1
             ;;
         cycleGAN)
-            echo "ERROR: Not implemented MODEL_TYPE: ${MODEL_TYPE}"
-            exit 1
+            PGAN_TRAINING_DIR="${SCRIPT_DIR}/training"
+            run_step "4. Running cycleGAN model inference" \
+                env CUDA_VISIBLE_DEVICES="${GPU}" \
+                conda run -n "${MODEL_ENV}" python \
+                    "${PGAN_TRAINING_DIR}/inference_synth.py" \
+                    --dataroot "${SLICES_DIR}" \
+                    --name "${MODEL_NAME}" \
+                    --checkpoints_dir "${CHECKPOINT_DIR}" \
+                    --epoch "${EPOCH}" \
+                    --results_dir "${DIR_INFERENCE}" \
+                    --model cycle_gan \
+                    --netG unet_256 \
+                    --input_nc 1 \
+                    --output_nc 1 \
+                    --preprocess none \
+                    --no_flip \
+                    --direction AtoB \
+                    --no_dropout \
+                    --eval
             ;;
         *)
             echo "ERROR: Unknown MODEL_TYPE: ${MODEL_TYPE}"
