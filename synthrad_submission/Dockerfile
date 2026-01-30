@@ -2,10 +2,41 @@
 # SynthRAD2025 Grand Challenge - MR-to-CT Synthesis Docker Container
 #
 # Build context: repository root (fullbody-sCT/)
-# Build command: docker build -t synthrad_algorithm -f synthrad_submission/Dockerfile .
+# Build command:
+#   docker build -t synthrad_algorithm -f synthrad_submission/Dockerfile \
+#       --build-arg MODEL_TYPE=CUT --build-arg BODYREGION_TYPE=allregions .
 # =============================================================================
 
+# ---------------------------------------------------------------------------
+# Stage 1: Select checkpoints based on MODEL_TYPE
+# ---------------------------------------------------------------------------
+FROM alpine:latest AS checkpoint-selector
+
+ARG MODEL_TYPE=CUT
+
+# Copy ALL checkpoints to builder stage
+COPY data/checkpoints/ /all_checkpoints/
+
+# Select only the 4 checkpoints matching MODEL_TYPE
+# Patterns: CUT=cut_synthrad_*, cycleGAN=cyclegan_*, pix2pix=pix2pix_synthrad_*
+RUN mkdir -p /selected_checkpoints && \
+    case "${MODEL_TYPE}" in \
+        CUT)      cp -r /all_checkpoints/cut_synthrad_* /selected_checkpoints/ ;; \
+        cycleGAN) cp -r /all_checkpoints/cyclegan_* /selected_checkpoints/ ;; \
+        pix2pix)  cp -r /all_checkpoints/pix2pix_synthrad_* /selected_checkpoints/ ;; \
+        *)        echo "ERROR: Unknown MODEL_TYPE: ${MODEL_TYPE}" && exit 1 ;; \
+    esac && \
+    echo "Selected checkpoints for MODEL_TYPE=${MODEL_TYPE}:" && \
+    ls -la /selected_checkpoints/
+
+# ---------------------------------------------------------------------------
+# Stage 2: Final image
+# ---------------------------------------------------------------------------
 FROM condaforge/miniforge3:latest
+
+# Re-declare ARGs for use in final stage (ARGs don't persist across stages)
+ARG MODEL_TYPE=CUT
+ARG BODYREGION_TYPE=allregions
 
 # System dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -57,12 +88,12 @@ COPY --chown=algorithm:algorithm \
     /opt/algorithm/training_cut/
 
 # ---------------------------------------------------------------------------
-# Model checkpoints
+# Model checkpoints - ONLY the 4 matching MODEL_TYPE (from builder stage)
 # ---------------------------------------------------------------------------
 
-COPY --chown=algorithm:algorithm \
-    data/checkpoints/cut_synthrad_allregions_final/ \
-    /opt/algorithm/checkpoints/cut_synthrad_allregions_final/
+COPY --from=checkpoint-selector --chown=algorithm:algorithm \
+    /selected_checkpoints/ \
+    /opt/algorithm/checkpoints/
 
 # ---------------------------------------------------------------------------
 # Pipeline script and Docker entrypoint
@@ -70,6 +101,9 @@ COPY --chown=algorithm:algorithm \
 
 COPY --chown=algorithm:algorithm synthrad2025_inference.sh /opt/algorithm/
 COPY --chown=algorithm:algorithm synthrad_submission/docker_entrypoint.sh /opt/algorithm/
+COPY --chown=algorithm:algorithm synthrad_submission/load_input.py /opt/algorithm/synthrad_submission/
+COPY --chown=algorithm:algorithm synthrad_submission/find_model_ex1.py /opt/algorithm/synthrad_submission/
+COPY --chown=algorithm:algorithm synthrad_submission/provide_output.py /opt/algorithm/synthrad_submission/
 
 # Fix Windows CRLF line endings and set executable
 RUN sed -i 's/\r$//' /opt/algorithm/synthrad2025_inference.sh \
@@ -92,5 +126,8 @@ USER algorithm
 
 ENV TASK_TYPE=mri
 ENV EXECUTE_IN_DOCKER=1
+# Make MODEL_TYPE and BODYREGION_TYPE available at runtime
+ENV MODEL_TYPE=${MODEL_TYPE}
+ENV BODYREGION_TYPE=${BODYREGION_TYPE}
 
 ENTRYPOINT ["/opt/algorithm/docker_entrypoint.sh"]
