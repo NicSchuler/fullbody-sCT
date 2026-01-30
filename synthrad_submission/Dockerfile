@@ -78,10 +78,9 @@ COPY --chown=algorithm:algorithm \
     preprocessing/preprocessing_synthrad/ \
     /opt/algorithm/preprocessing/preprocessing_synthrad/
 
-# training/data/ is imported by inference_synth.py
 COPY --chown=algorithm:algorithm \
-    training/data/ \
-    /opt/algorithm/training/data/
+    training/ \
+    /opt/algorithm/training/
 
 COPY --chown=algorithm:algorithm \
     training_cut/ \
