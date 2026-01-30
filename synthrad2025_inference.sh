@@ -7,7 +7,7 @@
 #   1. Resample MR (no crop to bbox)
 #   2. Normalize MR (baseline normalization)
 #   3. Create 2D slices (MR only)
-#   4. Run CUT model inference
+#   4. Run model inference (CUT, pix2pix, or cycleGAN)
 #   5. Reconstruct 3D volume
 #   6. Copy results to output (10reconstruction -> GC output)
 #
@@ -51,7 +51,8 @@ GC_INPUT_DIR="/local/scratch/datasets/FullbodySCT/nicolas_test_pipeline/input"
 GC_OUTPUT_DIR="/local/scratch/datasets/FullbodySCT/nicolas_test_pipeline/output"
 OUTPUT_DIR="/local/scratch/datasets/FullbodySCT/nicolas_test_pipeline/temp"
 CHECKPOINT_DIR="/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/8checkpoints"
-MODEL_NAME="cut_synthrad_allregions_final"
+MODEL_TYPE="CUT"
+BODYREGION_TYPE="allregions"
 EPOCH="50"
 GPU="1"
 NORMALIZATION="31baseline"
@@ -79,8 +80,12 @@ while [[ $# -gt 0 ]]; do
             CHECKPOINT_DIR="$2"
             shift 2
             ;;
-        --model-name)
-            MODEL_NAME="$2"
+        --model-type)
+            MODEL_TYPE="$2"
+            shift 2
+            ;;
+        --bodyregion-type)
+            BODYREGION_TYPE="$2"
             shift 2
             ;;
         --epoch)
@@ -128,8 +133,10 @@ while [[ $# -gt 0 ]]; do
             echo "                            Default: $OUTPUT_DIR"
             echo "  --checkpoint-dir DIR      Checkpoint directory"
             echo "                            Default: $CHECKPOINT_DIR"
-            echo "  --model-name NAME         Model name (folder in checkpoint dir)"
-            echo "                            Default: $MODEL_NAME"
+            echo "  --model-type TYPE         Model type (CUT, cycleGAN, pix2pix)"
+            echo "                            Default: $MODEL_TYPE"
+            echo "  --bodyregion-type TYPE    Body region type (allregions or regionspecific)"
+            echo "                            Default: $BODYREGION_TYPE"
             echo "  --epoch EPOCH             Epoch number"
             echo "                            Default: $EPOCH"
             echo "  --gpu GPU_ID              GPU ID (-1 for CPU)"
@@ -193,7 +200,8 @@ echo "GC Input:        ${GC_INPUT_DIR}"
 echo "GC Output:       ${GC_OUTPUT_DIR}"
 echo "Temp dir:        ${OUTPUT_DIR}"
 echo "Checkpoint dir:  ${CHECKPOINT_DIR}"
-echo "Model:           ${MODEL_NAME}"
+echo "Model type:      ${MODEL_TYPE}"
+echo "Body region:     ${BODYREGION_TYPE}"
 echo "Epoch:           ${EPOCH}"
 echo "GPU:             ${GPU}"
 echo "Normalization:   ${NORMALIZATION}"
@@ -215,12 +223,6 @@ fi
 if [[ ! -f "${GC_INPUT_DIR}/region.json" ]]; then
     echo "ERROR: region.json not found in: ${GC_INPUT_DIR}"
     exit 1
-fi
-
-CHECKPOINT_PATH="${CHECKPOINT_DIR}/${MODEL_NAME}/${EPOCH}_net_G.pth"
-if [[ ! -f "${CHECKPOINT_PATH}" ]]; then
-    echo "WARNING: Checkpoint not found: ${CHECKPOINT_PATH}"
-    echo "         Inference step will fail if not skipped."
 fi
 
 # Create output directories
@@ -258,91 +260,26 @@ run_step() {
 # STEP 0: PREPARE INPUT DATA (GC format -> 1initNifti)
 # =========================================================================
 
-run_step --no-cmd "0. Preparing input data" \
-    conda run -n "${PREPROC_ENV}" python -c "
-import json, shutil, os, sys, glob
-import SimpleITK as sitk
+run_step "0. Preparing input data" \
+    conda run -n "${PREPROC_ENV}" python \
+        "${SCRIPT_DIR}/synthrad_submission/load_input.py" \
+        --gc-input "${GC_INPUT_DIR}" \
+        --init-dir "${INPUT_DIR}"
 
-gc_input = sys.argv[1]
-init_dir = sys.argv[2]
+# =========================================================================
+# Determine MODEL_NAME based on MODEL_TYPE, BODYREGION_TYPE and region prefix
+# =========================================================================
 
-def convert_to_nii_gz(src, dst):
-    \"\"\"Copy if already .nii.gz, otherwise convert via SimpleITK.\"\"\"
-    if src.endswith('.nii.gz'):
-        shutil.copy2(src, dst)
-    else:
-        img = sitk.ReadImage(src)
-        sitk.WriteImage(img, dst)
-
-# Read region
-with open(os.path.join(gc_input, 'region.json')) as f:
-    region = json.load(f)
-
-prefix_map = {'Head and Neck': 'HN', 'Abdomen': 'AB', 'Thorax': 'TH'}
-prefix = prefix_map.get(region)
-if not prefix:
-    print(f'ERROR: Unknown region: {region}')
-    sys.exit(1)
-
-print(f'Region: {region} -> Prefix: {prefix}')
-
-# Discover MRI files from input/images/mri/ (.nii.gz, .nii, .mha)
-mri_dir = os.path.join(gc_input, 'images', 'mri')
-if not os.path.isdir(mri_dir):
-    print(f'ERROR: MRI directory not found: {mri_dir}')
-    sys.exit(1)
-
-mri_files = sorted(
-    glob.glob(os.path.join(mri_dir, '*.nii.gz'))
-    + glob.glob(os.path.join(mri_dir, '*.nii'))
-    + glob.glob(os.path.join(mri_dir, '*.mha'))
-)
-if not mri_files:
-    print(f'ERROR: No image files found in {mri_dir}')
-    sys.exit(1)
-
-# Discover body mask files (optional, matched to MRI files by sorted index)
-body_dir = os.path.join(gc_input, 'images', 'body')
-body_files = []
-if os.path.isdir(body_dir):
-    body_files = sorted(
-        glob.glob(os.path.join(body_dir, '*.nii.gz'))
-        + glob.glob(os.path.join(body_dir, '*.nii'))
-        + glob.glob(os.path.join(body_dir, '*.mha'))
-    )
-
-# Mapping: patient_id -> original MRI filename (to restore format in Step 6)
-input_mapping = {}
-
-for idx, mri_path in enumerate(mri_files):
-    basename = os.path.basename(mri_path)
-    patient_id = f'{prefix}_{idx + 1:03d}'
-
-    input_mapping[patient_id] = basename
-
-    # Create directory structure
-    mr_dir = os.path.join(init_dir, patient_id, 'MR')
-    mask_dir = os.path.join(init_dir, patient_id, 'masks')
-    os.makedirs(mr_dir, exist_ok=True)
-    os.makedirs(mask_dir, exist_ok=True)
-
-    # Copy/convert MRI to .nii.gz
-    dst_mri = os.path.join(mr_dir, f'{patient_id}_MR.nii.gz')
-    convert_to_nii_gz(mri_path, dst_mri)
-    print(f'  MRI:  {mri_path} -> {dst_mri}')
-
-    # Copy/convert body mask if available (matched by sorted index)
-    if idx < len(body_files):
-        dst_body = os.path.join(mask_dir, f'{patient_id}_mask.nii.gz')
-        convert_to_nii_gz(body_files[idx], dst_body)
-        print(f'  Mask: {body_files[idx]} -> {dst_body}')
-
-# Save mapping for Step 6
-mapping_path = os.path.join(init_dir, 'input_mapping.json')
-with open(mapping_path, 'w') as f:
-    json.dump(input_mapping, f)
-print(f'  Mapping saved to {mapping_path}')
-" "${GC_INPUT_DIR}" "${INPUT_DIR}"
+echo ""
+echo "======================================================================"
+MODEL_NAME=$(conda run -n "${PREPROC_ENV}" python \
+    "${SCRIPT_DIR}/synthrad_submission/find_model_ex1.py" \
+    --model-type "${MODEL_TYPE}" \
+    --bodyregion-type "${BODYREGION_TYPE}" \
+    --init-dir "${INPUT_DIR}" \
+    --checkpoint-dir "${CHECKPOINT_DIR}" \
+    --epoch "${EPOCH}")
+echo "======================================================================"
 
 # =========================================================================
 # PREPROCESSING STEPS
@@ -399,21 +336,38 @@ if [[ "${SKIP_INFERENCE}" == false ]]; then
     fi
 
     # Step 4: Model inference
-    run_step "4. Running CUT model inference" \
-        env CUDA_VISIBLE_DEVICES="${GPU}" \
-        conda run -n "${MODEL_ENV}" python \
-            "${TRAINING_DIR}/inference_synth.py" \
-            --dataroot "${SLICES_DIR}" \
-            --name "${MODEL_NAME}" \
-            --checkpoints_dir "${CHECKPOINT_DIR}" \
-            --epoch "${EPOCH}" \
-            --results_dir "${DIR_INFERENCE}" \
-            --model cut \
-            --input_nc 1 \
-            --output_nc 1 \
-            --preprocess none \
-            --no_flip \
-            --eval
+    case "${MODEL_TYPE}" in
+        CUT)
+            run_step "4. Running CUT model inference" \
+                env CUDA_VISIBLE_DEVICES="${GPU}" \
+                conda run -n "${MODEL_ENV}" python \
+                    "${TRAINING_DIR}/inference_synth.py" \
+                    --dataroot "${SLICES_DIR}" \
+                    --name "${MODEL_NAME}" \
+                    --checkpoints_dir "${CHECKPOINT_DIR}" \
+                    --epoch "${EPOCH}" \
+                    --results_dir "${DIR_INFERENCE}" \
+                    --model cut \
+                    --input_nc 1 \
+                    --output_nc 1 \
+                    --preprocess none \
+                    --no_flip \
+                    --eval
+            ;;
+        pix2pix)
+            echo "ERROR: Not implemented MODEL_TYPE: ${MODEL_TYPE}"
+            exit 1
+            ;;
+        cycleGAN)
+            echo "ERROR: Not implemented MODEL_TYPE: ${MODEL_TYPE}"
+            exit 1
+            ;;
+        *)
+            echo "ERROR: Unknown MODEL_TYPE: ${MODEL_TYPE}"
+            echo "       Supported types: CUT, pix2pix, cycleGAN"
+            exit 1
+            ;;
+    esac
 
 else
     echo ""
@@ -483,63 +437,13 @@ fi
 # STEP 6: COPY RESULTS TO OUTPUT (10reconstruction -> GC output)
 # =========================================================================
 
-run_step --no-cmd "6. Copying results to output" \
-    conda run -n "${PREPROC_ENV}" python -c "
-import json, shutil, os, sys
-import SimpleITK as sitk
-
-gc_input = sys.argv[1]
-gc_output = sys.argv[2]
-reconstruction_dir = sys.argv[3]
-init_dir = sys.argv[4]
-
-# Read input mapping (patient_id -> original filename) saved in Step 0
-mapping_path = os.path.join(init_dir, 'input_mapping.json')
-with open(mapping_path) as f:
-    input_mapping = json.load(f)
-
-# Output goes to {gc_output}/images/synthetic-ct/{original_filename}
-output_dir = os.path.join(gc_output, 'images', 'synthetic-ct')
-os.makedirs(output_dir, exist_ok=True)
-
-case_results = []
-
-for patient_id, original_basename in sorted(input_mapping.items()):
-    src = os.path.join(reconstruction_dir, patient_id, 'sCT_original_dim_reconstructed_alignment.nii.gz')
-    if not os.path.exists(src):
-        print(f'ERROR: Reconstructed file not found: {src}')
-        sys.exit(1)
-
-    # Output uses the original filename (preserving .mha / .nii / .nii.gz)
-    output_path = os.path.join(output_dir, original_basename)
-
-    if original_basename.endswith('.nii.gz'):
-        shutil.copy2(src, output_path)
-    else:
-        # Convert from .nii.gz back to original format (.mha, .nii)
-        img = sitk.ReadImage(src)
-        # Strip NIfTI-specific metadata that MetaImage format does not support
-        for key in ['ITK_FileNotes', 'aux_file', 'descrip', 'intent_name']:
-            if img.HasMetaDataKey(key):
-                img.EraseMetaData(key)
-        sitk.WriteImage(img, output_path)
-
-    print(f'  {src} -> {output_path}')
-
-    case_results.append({
-        'outputs': [{'type': 'metaio_image', 'filename': output_path}],
-        'inputs': [
-            {'type': 'metaio_image', 'filename': os.path.join(gc_input, 'images', 'mri', original_basename)},
-        ],
-        'error_messages': [],
-    })
-
-# Write results.json
-results_path = os.path.join(gc_output, 'results.json')
-with open(results_path, 'w') as f:
-    json.dump(case_results, f)
-print(f'  Results written to {results_path}')
-" "${GC_INPUT_DIR}" "${GC_OUTPUT_DIR}" "${DIR_RECONSTRUCTION}" "${INPUT_DIR}"
+run_step "6. Copying results to output" \
+    conda run -n "${PREPROC_ENV}" python \
+        "${SCRIPT_DIR}/synthrad_submission/provide_output.py" \
+        --gc-input "${GC_INPUT_DIR}" \
+        --gc-output "${GC_OUTPUT_DIR}" \
+        --reconstruction-dir "${DIR_RECONSTRUCTION}" \
+        --init-dir "${INPUT_DIR}"
 
 # =========================================================================
 # SUMMARY

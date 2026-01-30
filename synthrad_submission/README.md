@@ -37,35 +37,43 @@
 </p>
 
 ## Usage on Windows
-
 ```ps
+# Set name of container once
+cd <Export_DIR>
+$DOCKER_NAME = "cut_region_specific"
+$MODEL_TYPE = "CUT"
+$BODYREGION_TYPE = "regionspecific"
+
 # build container
 docker build `
-  -t cut_synthrad_allregions_final6 `
-  -f C:\Users\nicol\Coding\UZH\fullbody-sCT\synthrad_submission\Dockerfile `
-  --build-arg IMAGE_VERSION=$(Get-Date -Format yyyyMMddHHmmss) `
-  C:\Users\nicol\Coding\UZH\fullbody-sCT
-
-# docker build -t cut_synthrad_allregions_final -f C:\Users\nicol\Coding\UZH\fullbody-sCT\synthrad_submission\Dockerfile C:\Users\nicol\Coding\UZH\fullbody-sCT
+  -t $DOCKER_NAME `
+  -f "<PROJECT_DIR>\synthrad_submission\Dockerfile" `
+  --build-arg "IMAGE_VERSION=$(Get-Date -Format yyyyMMddHHmmss)" `
+  --build-arg "MODEL_TYPE=$MODEL_TYPE"  `
+  --build-arg "BODYREGION_TYPE=$BODYREGION_TYPE"  `
+  "<PROJECT_DIR>"
 
 # run testing
 $VOLUME_SUFFIX = (New-Guid).ToString().Substring(0,8)
-docker volume create cut_synthrad_allregions_final-output-$VOLUME_SUFFIX
+docker volume create "$DOCKER_NAME-output-$VOLUME_SUFFIX"
+
 docker run --rm `
-    --memory="15g" `
-    --memory-swap="15g" `
-    --network="none" `
-    --cap-drop="ALL" `
-    --security-opt="no-new-privileges" `
-    --shm-size="128m" `
-    --pids-limit="256" `
-    -v C:\Users\nicol\Coding\UZH\fullbody-sCT\data\input:/input `
-    -v synthrad_algorithm-output-${VOLUME_SUFFIX}:/output/ `
-    cut_synthrad_allregions_final6
+  --memory="15g" `
+  --memory-swap="15g" `
+  --network="none" `
+  --cap-drop="ALL" `
+  --security-opt="no-new-privileges" `
+  --shm-size="128m" `
+  --pids-limit="256" `
+  -v "<PROJECT_DIR>\data\input:/input" `
+  -v "${DOCKER_NAME}-output-${VOLUME_SUFFIX}:/output/" `
+  $DOCKER_NAME
 
 # export image
-docker save cut_synthrad_allregions_final6 -o IMAGE.tar
-wsl gzip -9 IMAGE.tar
+echo "Exporting to .tar"
+docker save $DOCKER_NAME -o "$DOCKER_NAME.tar"
+echo "Zipping to .tar.gz"
+wsl gzip -9 "$DOCKER_NAME.tar" # upload the output of this to synthrad
 ```
 
 <!-- TABLE OF CONTENTS -->
