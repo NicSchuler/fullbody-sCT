@@ -4,6 +4,7 @@ import numpy as np
 import os
 import nibabel as nib
 from skimage.metrics import structural_similarity as ssim
+from skimage.metrics import peak_signal_noise_ratio as peak_signal_noise_ratio
 
 
 def mean_absolute_error(image_true, image_generated,slice_mask): # , arr_diff_numerical):
@@ -24,45 +25,6 @@ def mean_absolute_error(image_true, image_generated,slice_mask): # , arr_diff_nu
     mae = diff_masked.mean()
     return mae  # , arr_diff_numerical
 
-def mean_and_graph_absolute_error(real_dct_numpy, fake_ct_numpy, slice_mask_air_or, air_ct_value, results_path,treatment,slice, sCT_diff, dCT_diff):
-
-    """Compute mean absolute error.
-
-    Args:
-        real_dct_numpy: (Tensor) true dCT image
-        fake_ct_numpy: (Tensor) generated image
-        slice_mask_air_or: (Tensor) mask of pre-contoured air bubbles
-
-    """
-    slice_mask_air_or=slice_mask_air_or*air_ct_value
-    diff_to_sCT=abs(fake_ct_numpy - slice_mask_air_or)
-    diff_to_dCT = abs(real_dct_numpy - slice_mask_air_or)
-    mae_air_or_sCT=0
-    mae_air_or_dCT=0
-
-
-    if slice_mask_air_or.shape==diff_to_sCT.shape and slice_mask_air_or.shape==diff_to_dCT.shape:
-        diff_to_sCT_masked = diff_to_sCT[slice_mask_air_or ==air_ct_value]
-        diff_to_dCT_masked = diff_to_dCT[slice_mask_air_or == air_ct_value]
-
-        ##check where the diff is 0 or no air masks#
-        mae_air_or_sCT=(np.abs(diff_to_sCT_masked)).mean()
-        mae_air_or_dCT=(np.abs(diff_to_dCT_masked)).mean()
-
-
-        sCT_to_merge=diff_to_sCT_masked.flatten()
-        dCT_to_merge = diff_to_dCT_masked.flatten()
-
-        sCT_diff.append(sCT_to_merge)
-        dCT_diff.append(dCT_to_merge)
-
-    else:
-        print("mask_error!")
-    return mae_air_or_sCT,mae_air_or_dCT, sCT_diff, dCT_diff
-
-
-
-#https://github.com/scikit-image/scikit-image/blob/main/skimage/metrics/simple_metrics.py
 
 def mean_squared_error(image_true, image_generated,slice_mask):
     diff = abs(image_true - image_generated)
@@ -75,7 +37,7 @@ def mean_squared_error(image_true, image_generated,slice_mask):
     return mse
 
 
-def peak_signal_to_noise_ratio(image_true, image_generated,slice_mask):
+def peak_signal_to_noise_ratio(image_true, image_generated,slice_mask,data_range=2224.0):
     """"Compute peak signal-to-noise ratio.
 
     Args:
@@ -84,17 +46,19 @@ def peak_signal_to_noise_ratio(image_true, image_generated,slice_mask):
 
     Returns:
         psnr: (float) peak signal-to-noise ratio"""
-    diff = abs(image_true - image_generated)
-
-    if slice_mask is None or slice_mask.shape!=diff.shape: 
-        diff_masked = diff
+    if slice_mask is not None:
+        true = image_true[slice_mask == 1]
+        fake = image_generated[slice_mask == 1]
     else:
-        diff_masked = diff[slice_mask ==1]
-    mse = (diff_masked ** 2).mean()
+        true = image_true
+        fake = image_generated
 
-    max_pixel = 3071+1024
-    psnr = 20 * np.log10(max_pixel / np.sqrt(mse))
-    return psnr
+    psnr = peak_signal_noise_ratio(
+        true,
+        fake,
+        data_range=data_range,
+    )
+    return float(psnr)
 
 
 def structural_similarity_index_skimage(image_true, image_generated, slice_mask=None, data_range=1.0):

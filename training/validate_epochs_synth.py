@@ -234,7 +234,7 @@ if __name__ == "__main__":
             # ---- metrics ----
             mae = mean_absolute_error(real_ct_numpy, fake_ct_numpy, mask)
             mse = mean_squared_error(real_ct_numpy, fake_ct_numpy, mask)
-            psnr = peak_signal_to_noise_ratio(real_ct_numpy, fake_ct_numpy, mask)
+            psnr = peak_signal_to_noise_ratio(real_ct_numpy, fake_ct_numpy, mask, data_range=ct_max_value - ct_min_value)
             fake_norm_01 = (fake_norm + 1) / 2
             _, ssim = structural_similarity_index_skimage(
                 real_ct_nii_array,
