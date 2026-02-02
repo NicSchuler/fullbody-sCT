@@ -190,9 +190,9 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     
     # Auto-configure paths based on normalization method if not explicitly provided
     if args.slices_root is None:
-        args.slices_root = str(DEFAULT_BASE / "experiment2" / args.normalization_method / "5slices")
+        args.slices_root = str(DEFAULT_BASE / args.normalization_method / "5slices")
     if args.out_dir is None:
-        args.out_dir = str(DEFAULT_BASE / "experiment2" / args.normalization_method / "6materialized_splits")
+        args.out_dir = str(DEFAULT_BASE / args.normalization_method / "6materialized_splits")
     
     return args
 
