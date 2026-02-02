@@ -25,7 +25,7 @@ Usage:
     --baseline-root /path/to/31baseline/3normalized \
     --nyul-root /path/to/33nyul/3normalized \
     --out-root /path/to/33nyul/3normalized_by_case \
-    --copy-ct --ct-root /path/to/2resampledNifti
+    --copy-ct --ct-root /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/experiment2/31baseline/3normalized
 """
 
 from __future__ import annotations
