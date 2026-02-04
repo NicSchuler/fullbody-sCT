@@ -7,7 +7,18 @@ from skimage.metrics import structural_similarity as ssim
 from skimage.metrics import peak_signal_noise_ratio as peak_signal_noise_ratio
 
 
-def mean_absolute_error(image_true, image_generated,slice_mask): # , arr_diff_numerical):
+def _valid_mask(slice_mask, shape):
+    if slice_mask is None:
+        return None
+    if slice_mask.shape != shape:
+        return None
+    mask = slice_mask != 0
+    if mask.sum() == 0:
+        return None
+    return mask
+
+
+def mean_absolute_error(image_true, image_generated, slice_mask=None):  # , arr_diff_numerical):
     """Compute mean absolute error.
 
     Args:
@@ -16,28 +27,27 @@ def mean_absolute_error(image_true, image_generated,slice_mask): # , arr_diff_nu
 
     """
     diff = np.abs(image_true - image_generated)
-
-    if slice_mask is None or slice_mask.shape != diff.shape:
-        diff_masked = diff
+    mae_unmasked = diff.mean()
+    mask = _valid_mask(slice_mask, diff.shape)
+    if mask is None:
+        mae_masked = mae_unmasked
     else:
-        # works for both boolean masks and 0/1 masks
-        diff_masked = diff[slice_mask != 0]
-    mae = diff_masked.mean()
-    return mae  # , arr_diff_numerical
+        mae_masked = diff[mask].mean()
+    return float(mae_unmasked), float(mae_masked)  # , arr_diff_numerical
 
 
-def mean_squared_error(image_true, image_generated,slice_mask):
+def mean_squared_error(image_true, image_generated, slice_mask=None):
     diff = abs(image_true - image_generated)
-    if slice_mask is None or slice_mask.shape!=diff.shape: 
-        diff_masked = diff
+    mse_unmasked = (diff ** 2).mean()
+    mask = _valid_mask(slice_mask, diff.shape)
+    if mask is None:
+        mse_masked = mse_unmasked
     else:
-        diff_masked = diff[slice_mask ==1]
-
-    mse = (diff_masked ** 2).mean()
-    return mse
+        mse_masked = (diff[mask] ** 2).mean()
+    return float(mse_unmasked), float(mse_masked)
 
 
-def peak_signal_to_noise_ratio(image_true, image_generated,slice_mask,data_range=2224.0):
+def peak_signal_to_noise_ratio(image_true, image_generated, slice_mask=None, data_range=2224.0):
     """"Compute peak signal-to-noise ratio.
 
     Args:
@@ -46,25 +56,29 @@ def peak_signal_to_noise_ratio(image_true, image_generated,slice_mask,data_range
 
     Returns:
         psnr: (float) peak signal-to-noise ratio"""
-    if slice_mask is not None:
-        true = image_true[slice_mask == 1]
-        fake = image_generated[slice_mask == 1]
-    else:
-        true = image_true
-        fake = image_generated
-
-    psnr = peak_signal_noise_ratio(
-        true,
-        fake,
+    psnr_unmasked = peak_signal_noise_ratio(
+        image_true,
+        image_generated,
         data_range=data_range,
     )
-    return float(psnr)
+    mask = _valid_mask(slice_mask, image_true.shape)
+    if mask is None:
+        psnr_masked = psnr_unmasked
+    else:
+        psnr_masked = peak_signal_noise_ratio(
+            image_true[mask],
+            image_generated[mask],
+            data_range=data_range,
+        )
+    return float(psnr_unmasked), float(psnr_masked)
 
 
 def structural_similarity_index_skimage(image_true, image_generated, slice_mask=None, data_range=1.0):
     """Compute structural similarity index using skimage, optionally masked."""
     score, ssim_map = ssim(image_true, image_generated, data_range=data_range, full=True)
-    if slice_mask is None or slice_mask.shape != ssim_map.shape:
-        return float(score), float(ssim_map.mean())
-    masked_score = ssim_map[slice_mask != 0].mean()
+    mask = _valid_mask(slice_mask, ssim_map.shape)
+    if mask is None:
+        masked_score = score
+    else:
+        masked_score = ssim_map[mask].mean()
     return float(score), float(masked_score)

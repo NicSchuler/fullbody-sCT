@@ -167,17 +167,33 @@ if __name__ == '__main__':
                 print(f"Warning: Mask not found for {file_name}, skipping mask.")
 
         # compute metrics
-        mae = mean_absolute_error(real_ct_numpy, fake_ct_numpy, mask)
-        mse = mean_squared_error(real_ct_numpy, fake_ct_numpy, mask)
-        psnr = peak_signal_to_noise_ratio(real_ct_numpy, fake_ct_numpy, mask, data_range=ct_max_value - ct_min_value)
+        mae_unmasked, mae_masked = mean_absolute_error(real_ct_numpy, fake_ct_numpy, mask)
+        mse_unmasked, mse_masked = mean_squared_error(real_ct_numpy, fake_ct_numpy, mask)
+        psnr_unmasked, psnr_masked = peak_signal_to_noise_ratio(
+            real_ct_numpy,
+            fake_ct_numpy,
+            mask,
+            data_range=ct_max_value - ct_min_value,
+        )
         fake_norm_01 = (fake_norm + 1) / 2
-        _, ssim = structural_similarity_index_skimage(
+        ssim_unmasked, ssim_masked = structural_similarity_index_skimage(
             real_ct_nii_array,
             fake_norm_01,
             mask,
             data_range=1.0,
         )
-        res_test.append([file_name, mae, mse, psnr, ssim, mask_voxels])
+        res_test.append([
+            file_name,
+            mae_unmasked,
+            mae_masked,
+            mse_unmasked,
+            mse_masked,
+            psnr_unmasked,
+            psnr_masked,
+            ssim_unmasked,
+            ssim_masked,
+            mask_voxels,
+        ])
 
 
         #save dicoms and niftis
@@ -203,27 +219,25 @@ if __name__ == '__main__':
 
 
     print("Results for test split, mean:")
-    df = pd.DataFrame([
-        pd.DataFrame(res_test, columns=['file_name', 'MAE', "MSE", "PSNR", 'SSIM', "mask_voxels"])
-        .drop(columns=["file_name", "mask_voxels"])
-        .mean()
-        .squeeze()
-    ], index=['Test set']).T
+    metric_columns = [
+        "MAE_unmasked", "MAE_masked",
+        "MSE_unmasked", "MSE_masked",
+        "PSNR_unmasked", "PSNR_masked",
+        "SSIM_unmasked", "SSIM_masked",
+    ]
+    output_columns = ["file_name", *metric_columns, "mask_voxels"]
+    metrics_df = pd.DataFrame(res_test, columns=output_columns)
+    df = pd.DataFrame([metrics_df[metric_columns].mean().squeeze()], index=['Test set']).T
 
     metrics_dir = os.path.join(opt.results_dir, opt.name, f"{opt.phase}_{opt.epoch}")
-    pd.DataFrame(res_test, columns=['file_name', 'MAE', "MSE", "PSNR", 'SSIM', "mask_voxels"]).to_csv(
+    metrics_df.to_csv(
         os.path.join(metrics_dir, "test_metrics_over_all.csv")
     )
 
     print(df)
 
     print("Results for test split, standard deviation:")
-    st_d_df = pd.DataFrame([
-        pd.DataFrame(res_test, columns=['file_name', 'MAE', "MSE", "PSNR", 'SSIM', "mask_voxels"])
-        .drop(columns=["file_name", "mask_voxels"])
-        .std()
-        .squeeze()
-    ], index=['Test set']).T
+    st_d_df = pd.DataFrame([metrics_df[metric_columns].std().squeeze()], index=['Test set']).T
 
     st_d_df.to_csv(os.path.join(metrics_dir, "test_metrics_std_over_all.csv"))
 

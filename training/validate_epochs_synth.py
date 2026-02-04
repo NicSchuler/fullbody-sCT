@@ -232,21 +232,39 @@ if __name__ == "__main__":
                     print(f"Warning: Mask not found for {file_name}, skipping mask.")
 
             # ---- metrics ----
-            mae = mean_absolute_error(real_ct_numpy, fake_ct_numpy, mask)
-            mse = mean_squared_error(real_ct_numpy, fake_ct_numpy, mask)
-            psnr = peak_signal_to_noise_ratio(real_ct_numpy, fake_ct_numpy, mask, data_range=ct_max_value - ct_min_value)
+            mae_unmasked, mae_masked = mean_absolute_error(real_ct_numpy, fake_ct_numpy, mask)
+            mse_unmasked, mse_masked = mean_squared_error(real_ct_numpy, fake_ct_numpy, mask)
+            psnr_unmasked, psnr_masked = peak_signal_to_noise_ratio(
+                real_ct_numpy,
+                fake_ct_numpy,
+                mask,
+                data_range=ct_max_value - ct_min_value,
+            )
             fake_norm_01 = (fake_norm + 1) / 2
-            _, ssim = structural_similarity_index_skimage(
+            ssim_unmasked, ssim_masked = structural_similarity_index_skimage(
                 real_ct_nii_array,
                 fake_norm_01,
                 mask,
                 data_range=1.0,
             )
 
-            res.append([mae, mse, psnr, ssim])
+            res.append([
+                mae_unmasked, mae_masked,
+                mse_unmasked, mse_masked,
+                psnr_unmasked, psnr_masked,
+                ssim_unmasked, ssim_masked,
+            ])
 
         # ---- metrics for this epoch ----
-        res_df = pd.DataFrame(res, columns=["MAE", "MSE", "PSNR", "SSIM"])
+        res_df = pd.DataFrame(
+            res,
+            columns=[
+                "MAE_unmasked", "MAE_masked",
+                "MSE_unmasked", "MSE_masked",
+                "PSNR_unmasked", "PSNR_masked",
+                "SSIM_unmasked", "SSIM_masked",
+            ],
+        )
 
         df_mean = res_df.mean().to_frame(name="mean")
         df_std = res_df.std().to_frame(name="std")
