@@ -99,6 +99,7 @@ if __name__ == '__main__':
     real_key = 'real_' + opt.direction[-1]
 
     res_test = []
+    skipped_zero_mask_rows = 0
 
     results_path = os.path.join(
         "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/9latestTestImages",
@@ -182,18 +183,22 @@ if __name__ == '__main__':
             mask,
             data_range=1.0,
         )
-        res_test.append([
-            file_name,
-            mae_unmasked,
-            mae_masked,
-            mse_unmasked,
-            mse_masked,
-            psnr_unmasked,
-            psnr_masked,
-            ssim_unmasked,
-            ssim_masked,
-            mask_voxels,
-        ])
+        # Keep only slices with non-empty masks in the metrics CSV.
+        if mask_voxels > 0:
+            res_test.append([
+                file_name,
+                mae_unmasked,
+                mae_masked,
+                mse_unmasked,
+                mse_masked,
+                psnr_unmasked,
+                psnr_masked,
+                ssim_unmasked,
+                ssim_masked,
+                mask_voxels,
+            ])
+        else:
+            skipped_zero_mask_rows += 1
 
 
         #save dicoms and niftis
@@ -227,6 +232,7 @@ if __name__ == '__main__':
     ]
     output_columns = ["file_name", *metric_columns, "mask_voxels"]
     metrics_df = pd.DataFrame(res_test, columns=output_columns)
+    print(f"Skipped {skipped_zero_mask_rows} slices with mask_voxels == 0 when writing CSV metrics.")
     df = pd.DataFrame([metrics_df[metric_columns].mean().squeeze()], index=['Test set']).T
 
     metrics_dir = os.path.join(opt.results_dir, opt.name, f"{opt.phase}_{opt.epoch}")

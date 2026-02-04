@@ -6,14 +6,18 @@
 Converts all volumes in 2resampledNifti back to original dimensions.
 
 Usage:
-    python 82resampled_to_original.py [--output_dir <path>]
+    python 82resampled_to_original.py [--output_dir <path>] [--patients <id1,id2,...>]
 
 Arguments:
     --output_dir    Output directory (default: 2resampledNifti_reconstructed_dims)
+    --patients      Optional patient filter. Process only these patient IDs.
 
 Examples:
     python 82resampled_to_original.py
     python 82resampled_to_original.py --output_dir /path/to/output
+    python 82resampled_to_original.py --patients AB_1ABA009
+    python 82resampled_to_original.py --patients AB_1ABA009 AB_1ABA010
+    python 82resampled_to_original.py --patients AB_1ABA009,AB_1ABA010
 
 This script:
     1. Iterates over all patient folders in 2resampledNifti
@@ -133,6 +137,9 @@ def main():
 Examples:
   python 82resampled_to_original.py
   python 82resampled_to_original.py --output_dir /path/to/output
+  python 82resampled_to_original.py --patients AB_1ABA009
+  python 82resampled_to_original.py --patients AB_1ABA009 AB_1ABA010
+  python 82resampled_to_original.py --patients AB_1ABA009,AB_1ABA010
 
 Output Structure:
   <output_dir>/{patient_id}/
@@ -152,6 +159,15 @@ IMPORTANT: The "reconstructed_alignment" naming indicates that spatial alignment
         default=None,
         help="Output directory (default: 2resampledNifti_reconstructed_dims in BASE_ROOT)"
     )
+    parser.add_argument(
+        "--patients",
+        nargs="+",
+        default=None,
+        help=(
+            "Optional patient ID filter. Accepts space-separated and/or comma-separated "
+            "values, e.g. --patients AB_1ABA009 AB_1ABA010 or --patients AB_1ABA009,AB_1ABA010"
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -167,14 +183,39 @@ IMPORTANT: The "reconstructed_alignment" naming indicates that spatial alignment
         sys.exit(1)
 
     # Get all patient folders
-    patient_folders = sorted([
+    all_patient_folders = sorted([
         d for d in RESAMPLED_DIR.iterdir()
         if d.is_dir() and not d.name.startswith('.')
     ])
 
-    if not patient_folders:
+    if not all_patient_folders:
         print(f"ERROR: No patient folders found in {RESAMPLED_DIR}")
         sys.exit(1)
+
+    # Optional patient filtering
+    requested_patients = None
+    if args.patients:
+        requested_patients = set()
+        for token in args.patients:
+            for part in token.split(","):
+                pid = part.strip()
+                if pid:
+                    requested_patients.add(pid)
+
+    if requested_patients:
+        available_by_name = {p.name: p for p in all_patient_folders}
+        patient_folders = [available_by_name[pid] for pid in sorted(requested_patients) if pid in available_by_name]
+        missing = sorted(requested_patients - set(available_by_name.keys()))
+        if missing:
+            print(f"WARNING: {len(missing)} requested patient(s) not found in {RESAMPLED_DIR}:")
+            for pid in missing:
+                print(f"  - {pid}")
+            print()
+        if not patient_folders:
+            print("ERROR: None of the requested patients were found. Nothing to process.")
+            sys.exit(1)
+    else:
+        patient_folders = all_patient_folders
 
     print("=" * 80)
     print("Convert 2resampledNifti to Original Dimensions")
@@ -183,6 +224,8 @@ IMPORTANT: The "reconstructed_alignment" naming indicates that spatial alignment
     print(f"Reference data:         {INIT_DIR}")
     print(f"Output:                 {output_dir}")
     print(f"Patients to process:    {len(patient_folders)}")
+    if requested_patients:
+        print("Patient filter:         enabled")
     print("=" * 80)
     print()
 

@@ -26,7 +26,8 @@ def mean_absolute_error(image_true, image_generated, slice_mask=None):  # , arr_
         image_generated: (Tensor) generated image
 
     """
-    diff = np.abs(image_true - image_generated)
+    # Cast to float to avoid integer overflow/underflow in subtraction.
+    diff = np.abs(image_true.astype(np.float32) - image_generated.astype(np.float32))
     mae_unmasked = diff.mean()
     mask = _valid_mask(slice_mask, diff.shape)
     if mask is None:
@@ -37,13 +38,15 @@ def mean_absolute_error(image_true, image_generated, slice_mask=None):  # , arr_
 
 
 def mean_squared_error(image_true, image_generated, slice_mask=None):
-    diff = abs(image_true - image_generated)
-    mse_unmasked = (diff ** 2).mean()
+    # Cast to float to avoid int16 overflow when squaring.
+    diff = image_true.astype(np.float32) - image_generated.astype(np.float32)
+    sq = diff * diff
+    mse_unmasked = sq.mean()
     mask = _valid_mask(slice_mask, diff.shape)
     if mask is None:
         mse_masked = mse_unmasked
     else:
-        mse_masked = (diff[mask] ** 2).mean()
+        mse_masked = sq[mask].mean()
     return float(mse_unmasked), float(mse_masked)
 
 
