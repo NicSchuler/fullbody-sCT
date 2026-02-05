@@ -19,7 +19,7 @@ from _pipeline_common import (
 )
 
 DEFAULT_PREPROC_ROOT = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed")
-DEFAULT_CT_ROOT = DEFAULT_PREPROC_ROOT / "1initNifti"
+DEFAULT_CT_ROOT = DEFAULT_PREPROC_ROOT / "2resampledNifti_reconstructed_dims"
 DEFAULT_SCT_BASE = DEFAULT_PREPROC_ROOT / "9latestTestImages"
 DEFAULT_OUTPUT_BASE = DEFAULT_PREPROC_ROOT / "11dvhEvalCases"
 
