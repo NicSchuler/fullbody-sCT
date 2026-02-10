@@ -222,3 +222,4 @@ training/results/*
 training/data/latest_test
 training/data/normalization
 training/data/*/
+training/checkpoints/swinv2_tiny_patch4_window8_256.pth

@@ -4,6 +4,8 @@ from torch.nn import init
 import functools
 from torch.optim import lr_scheduler
 
+from .swin_v2_unet_generator import SwinV2UNet256Generator
+
 
 ###############################################################################
 # Helper Functions
@@ -157,6 +159,22 @@ def define_G(input_nc, output_nc, ngf, netG, norm="batch", use_dropout=False, in
         net = UnetGenerator(input_nc, output_nc, 8, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
     elif netG == "unet_256_sep_first_layer":
         net = UnetGenerator(input_nc, output_nc, 8, ngf, norm_layer=norm_layer, use_dropout=use_dropout, separate_first_layer=True)
+    elif netG == "swin_v2_unet_256":
+        # Swin V2 UNet generator for 256x256 images
+        # Note: norm parameter is ignored (Swin uses LayerNorm internally)
+        # Pretrained weights are mandatory - checkpoint path resolved inside generator
+        net = SwinV2UNet256Generator(
+            input_nc=input_nc,
+            output_nc=output_nc,
+            embed_dim=96,
+            depths=[2, 2, 6, 2],
+            depths_decoder=[2, 2, 2, 2],
+            num_heads=[3, 6, 12, 24],
+            window_size=8,
+            use_dropout=use_dropout,
+            drop_rate=0.0 if not use_dropout else 0.1,
+            pretrained_path="checkpoints/swinv2_tiny_patch4_window8_256.pth"
+        )
     else:
         raise NotImplementedError("Generator model name [%s] is not recognized" % netG)
     return net
