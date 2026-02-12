@@ -16,7 +16,7 @@ CUDA_VISIBLE_DEVICES=4 python test_synth.py \
     --results_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/100results
 
 
-CUDA_VISIBLE_DEVICES=6 python test_synth.py \
+CUDA_VISIBLE_DEVICES=4 python test_synth.py \
     --dataroot '/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/experiment2/32p99/7materialized_splits_BodyRegion/AB/cyclegan/test' \
     --checkpoints_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/8checkpoints \
     --name 2_experiment_cut_synthrad_abdomen_32p99 \
@@ -33,7 +33,7 @@ CUDA_VISIBLE_DEVICES=6 python test_synth.py \
 
 
 
-CUDA_VISIBLE_DEVICES=3 python test_synth.py \
+CUDA_VISIBLE_DEVICES=4 python test_synth.py \
     --dataroot '/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/experiment2/33nyul/7materialized_splits_BodyRegion/AB/cyclegan/test' \
     --checkpoints_dir /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/8checkpoints \
     --name 2_experiment_cut_synthrad_abdomen_33nyul \

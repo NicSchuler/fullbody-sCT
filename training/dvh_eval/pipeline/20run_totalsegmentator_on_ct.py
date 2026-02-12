@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
-"""Step 20: Run TotalSegmentator on CT NIfTI (manifest-driven).
+"""Step 20: run TotalSegmentator on shared CT folders (manifest-free).
 
-Requested ROI outputs:
-- task="total": liver, kidney_left, kidney_right, spinal_cord
-- task="body": skin
+Reads CT from:
+  <export-root>/test_patients_shared/<patient>/CT/*.nii*
+Writes masks to:
+  <export-root>/test_patients_shared/<patient>/TS_CT/
 """
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
-
-from _pipeline_common import load_manifest, save_manifest
 
 try:
     from totalsegmentator.python_api import totalsegmentator
@@ -21,6 +20,9 @@ except Exception as exc:  # pragma: no cover
         "Install/activate env with `totalsegmentator` package."
     ) from exc
 
+
+DEFAULT_PREPROC_ROOT = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed")
+DEFAULT_OUTPUT_BASE = DEFAULT_PREPROC_ROOT / "11dvhEvalCases"
 
 TOTAL_TASK_ROIS = ["liver", "kidney_left", "kidney_right", "spinal_cord"]
 BODY_TASK_ROIS = ["skin"]
@@ -39,18 +41,26 @@ def missing_rois(out_dir: Path, rois: list[str]) -> list[str]:
     return [roi for roi in rois if not has_roi(out_dir, roi)]
 
 
-def make_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Step 20 - run TotalSegmentator on CT for selected ROIs")
-    p.add_argument("--manifest", type=Path, required=True)
-    p.add_argument("--device", default="gpu")
-    p.add_argument("--fast", action="store_true", help="Use TotalSegmentator fast mode.")
-    p.add_argument("--force", action="store_true")
-    # Backward-compatible args used by older shell scripts; ignored in new task flow.
-    p.add_argument("--task", default=None, help=argparse.SUPPRESS)
-    p.add_argument("--extra-tasks", nargs="*", default=None, help=argparse.SUPPRESS)
-    p.add_argument("--roi-subset", nargs="*", default=None, help=argparse.SUPPRESS)
-    p.add_argument("--expected-roi", default=None, help=argparse.SUPPRESS)
-    return p
+def read_patients(patients: list[str] | None, patients_file: Path | None, shared_root: Path) -> list[str]:
+    if patients:
+        return list(dict.fromkeys(patients))
+
+    if patients_file:
+        lines = [ln.strip() for ln in patients_file.read_text().splitlines()]
+        return [ln for ln in lines if ln and not ln.startswith("#")]
+
+    return sorted([p.name for p in shared_root.iterdir() if p.is_dir()]) if shared_root.is_dir() else []
+
+
+def find_shared_ct(patient_dir: Path) -> Path:
+    ct_dir = patient_dir / "CT"
+    if not ct_dir.is_dir():
+        raise FileNotFoundError(f"Missing CT folder: {ct_dir}")
+
+    cands = sorted(ct_dir.glob("*.nii.gz")) + sorted(ct_dir.glob("*.nii"))
+    if not cands:
+        raise FileNotFoundError(f"No CT NIfTI found in {ct_dir}")
+    return cands[0]
 
 
 def run_task(ct_nifti: Path, out_dir: Path, task: str, device: str, fast: bool, roi_subset=None) -> None:
@@ -65,7 +75,6 @@ def run_task(ct_nifti: Path, out_dir: Path, task: str, device: str, fast: bool, 
 
 
 def run_ct_task_flow(ct_nifti: Path, out_dir: Path, device: str, fast: bool, force: bool) -> dict:
-    """Run TotalSegmentator with correct task/ROI mapping."""
     task_state = {
         "ran_total_task": False,
         "ran_body_task": False,
@@ -77,7 +86,6 @@ def run_ct_task_flow(ct_nifti: Path, out_dir: Path, device: str, fast: bool, for
 
     task_state["missing_before_run"] = missing_rois(out_dir, REQUIRED_ROIS)
 
-    # total task for liver/kidneys/spinal cord
     if not force and has_all_rois(out_dir, TOTAL_TASK_ROIS):
         task_state["skipped_total_existing"] = True
     else:
@@ -91,7 +99,6 @@ def run_ct_task_flow(ct_nifti: Path, out_dir: Path, device: str, fast: bool, for
         )
         task_state["ran_total_task"] = True
 
-    # body task for skin
     if not force and has_all_rois(out_dir, BODY_TASK_ROIS):
         task_state["skipped_body_existing"] = True
     else:
@@ -100,25 +107,44 @@ def run_ct_task_flow(ct_nifti: Path, out_dir: Path, device: str, fast: bool, for
             out_dir=out_dir,
             task="body",
             device=device,
-            fast=fast
-            )
+            fast=fast,
+        )
         task_state["ran_body_task"] = True
 
     task_state["missing_after_run"] = missing_rois(out_dir, REQUIRED_ROIS)
     return task_state
 
 
+def make_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(description="Step 20 - run TotalSegmentator on shared CT folders")
+    p.add_argument("--export-root", type=Path, default=DEFAULT_OUTPUT_BASE)
+    p.add_argument("--patients", nargs="*", default=None)
+    p.add_argument("--patients-file", type=Path, default=None)
+    p.add_argument("--device", default="gpu")
+    p.add_argument("--fast", action="store_true", help="Use TotalSegmentator fast mode")
+    p.add_argument("--force", action="store_true")
+    return p
+
+
 def main() -> None:
     args = make_parser().parse_args()
-    manifest = load_manifest(args.manifest.resolve())
+    export_root = args.export_root.resolve()
+    shared_root = export_root / "test_patients_shared"
 
-    for case in manifest.get("cases", []):
-        patient = case["patient"]
-        ct_nifti = Path(case["ct_nifti"])
-        out_dir = Path(case["output_dirs"]["ts_ct"])
+    patients = read_patients(args.patients, args.patients_file, shared_root)
+    if not patients:
+        raise RuntimeError(f"No patients found under {shared_root}. Run step 10 first.")
+
+    ok = 0
+    failed = 0
+
+    for patient in patients:
+        patient_dir = shared_root / patient
+        out_dir = patient_dir / "TS_CT"
         out_dir.mkdir(parents=True, exist_ok=True)
 
         try:
+            ct_nifti = find_shared_ct(patient_dir)
             task_state = run_ct_task_flow(
                 ct_nifti=ct_nifti,
                 out_dir=out_dir,
@@ -128,33 +154,19 @@ def main() -> None:
             )
             if task_state["missing_after_run"]:
                 raise RuntimeError(f"Missing ROI outputs: {task_state['missing_after_run']}")
+
+            ok += 1
             print(
                 f"[OK] {patient} | "
                 f"total={'run' if task_state['ran_total_task'] else 'skip'} "
-                f"body={'run' if task_state['ran_body_task'] else 'skip'} "
-                f"roi={','.join(REQUIRED_ROIS)}"
+                f"body={'run' if task_state['ran_body_task'] else 'skip'}"
             )
-
-            case["status"]["step20_ts_done"] = True
-            case["step20"] = {
-                "tasks": {
-                    "total": TOTAL_TASK_ROIS,
-                    "body": BODY_TASK_ROIS,
-                },
-                "device": args.device,
-                "fast": args.fast,
-                "force": args.force,
-                "output_dir": str(out_dir),
-                "results": task_state,
-            }
         except Exception as exc:  # noqa: BLE001
-            case["status"]["step20_ts_done"] = False
-            case.setdefault("errors", []).append(f"step20: {exc}")
+            failed += 1
             print(f"[FAIL] {patient}: {exc}")
 
-    manifest["step"] = 20
-    save_manifest(manifest, args.manifest.resolve())
-    print(f"Updated manifest: {args.manifest}")
+    print("\nDone.")
+    print(f"Processed: {ok} | Failed: {failed}")
 
 
 if __name__ == "__main__":
