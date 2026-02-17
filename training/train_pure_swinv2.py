@@ -53,6 +53,7 @@ def get_options():
     parser.add_argument('--n_epochs_decay', type=int, default=0, help='# of epochs to linearly decay lr to zero')
     parser.add_argument('--save_epoch_freq', type=int, default=1, help='frequency of saving checkpoints at end of epochs')
     parser.add_argument('--lr', type=float, default=0.0002, help='initial learning rate for adam')
+    parser.add_argument('--freeze_encoder_except_first', action='store_true', help='freeze all encoder layers except patch_embed')
 
     opt = parser.parse_args()
 
@@ -133,7 +134,8 @@ class PureImg2ImgModel:
             window_size=8,
             use_dropout=False,
             drop_rate=0.0,
-            pretrained_path="checkpoints/swinv2_tiny_patch4_window8_256.pth"
+            pretrained_path="checkpoints/swinv2_tiny_patch4_window8_256.pth",
+            freeze_encoder_except_first=getattr(opt, 'freeze_encoder_except_first', False),
         )
         self.netG.to(device)
 
@@ -149,7 +151,7 @@ class PureImg2ImgModel:
 
         # Define optimizer (same as pix2pix: Adam with beta1=0.5, beta2=0.999)
         self.optimizer_G = torch.optim.Adam(
-            self.netG.parameters(),
+            filter(lambda p: p.requires_grad, self.netG.parameters()),
             lr=opt.lr,
             betas=(opt.beta1, opt.beta2)
         )
@@ -175,7 +177,9 @@ class PureImg2ImgModel:
         """Print network parameter count."""
         net = self.netG.module if hasattr(self.netG, 'module') else self.netG
         num_params = sum(p.numel() for p in net.parameters())
-        print(f'[Network G] Total parameters: {num_params / 1e6:.3f} M')
+        num_trainable = sum(p.numel() for p in net.parameters() if p.requires_grad)
+        print(f'[Network G] Total parameters: {num_params / 1e6:.3f} M, '
+              f'Trainable: {num_trainable / 1e6:.3f} M')
 
     def set_input(self, data):
         """Unpack input data from the dataloader."""

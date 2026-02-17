@@ -159,10 +159,11 @@ def define_G(input_nc, output_nc, ngf, netG, norm="batch", use_dropout=False, in
         net = UnetGenerator(input_nc, output_nc, 8, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
     elif netG == "unet_256_sep_first_layer":
         net = UnetGenerator(input_nc, output_nc, 8, ngf, norm_layer=norm_layer, use_dropout=use_dropout, separate_first_layer=True)
-    elif netG == "swin_v2_unet_256":
+    elif netG in ("swin_v2_unet_256", "swin_v2_unet_256_encoder_frozen_except_first"):
         # Swin V2 UNet generator for 256x256 images
         # Note: norm parameter is ignored (Swin uses LayerNorm internally)
         # Pretrained weights are mandatory - checkpoint path resolved inside generator
+        freeze_encoder = netG == "swin_v2_unet_256_encoder_frozen_except_first"
         net = SwinV2UNet256Generator(
             input_nc=input_nc,
             output_nc=output_nc,
@@ -173,7 +174,8 @@ def define_G(input_nc, output_nc, ngf, netG, norm="batch", use_dropout=False, in
             window_size=8,
             use_dropout=use_dropout,
             drop_rate=0.0 if not use_dropout else 0.1,
-            pretrained_path="checkpoints/swinv2_tiny_patch4_window8_256.pth"
+            pretrained_path="checkpoints/swinv2_tiny_patch4_window8_256.pth",
+            freeze_encoder_except_first=freeze_encoder,
         )
     else:
         raise NotImplementedError("Generator model name [%s] is not recognized" % netG)

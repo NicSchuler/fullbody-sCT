@@ -608,6 +608,7 @@ class SwinV2UNet256Generator(nn.Module):
         pretrained_window_sizes=[0, 0, 0, 0],
         use_dropout=False,
         pretrained_path="checkpoints/swinv2_tiny_patch4_window8_256.pth",
+        freeze_encoder_except_first=False,
         **kwargs
     ):
         super().__init__()
@@ -723,6 +724,14 @@ class SwinV2UNet256Generator(nn.Module):
 
         # Load pretrained weights (mandatory)
         self._load_pretrained(pretrained_path)
+
+        # Freeze encoder layers (keep patch_embed trainable)
+        if freeze_encoder_except_first:
+            for i in range(0, self.num_layers):
+                for param in self.layers[i].parameters():
+                    param.requires_grad = False
+            print(f"Froze encoder layers 0-{self.num_layers - 1} "
+                  f"(patch_embed remain trainable)")
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
