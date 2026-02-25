@@ -21,7 +21,7 @@ from pathlib import Path
 BASE_ROOT = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed")
 
 src_root = BASE_ROOT / "2resampledNifti"  # Input: resampled but not normalized
-out_root = BASE_ROOT / "32p99" / "3normalized"  # Output: normalized
+out_root = BASE_ROOT / "experiment2" / "32p99" / "3normalized"  # Output: normalized
 
 save_zipped = True
 # ==========================

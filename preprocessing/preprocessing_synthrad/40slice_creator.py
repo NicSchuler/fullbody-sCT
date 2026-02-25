@@ -33,7 +33,7 @@ import nibabel as nib
 # ===================== CONFIG =====================
 
 # NORMALIZATION_METHOD: Choose which preprocessing pipeline to use
-# Options: "31baseline", "32p99", "33nyul", "34npeaks"
+# Options: "31baseline", "32p99", "33nyul", "34npeaks" "34normalized_n4_03LIC", "34normalized_n4_08LIC", "34normalized_n4_centerspecific_03LIC", "34normalized_n4_centerspecific_08LIC"
 # Can be overridden via command line argument: python 40slice_creator.py 32p99
 NORMALIZATION_METHOD = "32p99"  # Default: per-file p99
 
@@ -318,7 +318,7 @@ def configure_paths(method: str, custom_base_root: str = None, mr_only: bool = F
     """
     global CT_ROOT, MR_ROOT, OUT_ROOT, SLICE_ROOT
 
-    valid_methods = ["31baseline", "32p99", "33nyul", "34npeaks"]
+    valid_methods = ["31baseline", "32p99", "33nyul", "34normalized_n4_03LIC", "34normalized_n4_08LIC", "34normalized_n4_centerspecific_03LIC", "34normalized_n4_centerspecific_08LIC"]
 
     if method not in valid_methods:
         raise ValueError(
@@ -379,7 +379,7 @@ Examples:
         "normalization_method",
         nargs="?",
         default="32p99",
-        choices=["31baseline", "32p99", "33nyul", "34npeaks"],
+        choices=["31baseline", "32p99", "33nyul", "34npeaks", "34normalized_n4_03LIC", "34normalized_n4_08LIC", "34normalized_n4_centerspecific_03LIC", "34normalized_n4_centerspecific_08LIC"],
         help="Normalization method (default: 32p99)"
     )
     parser.add_argument(

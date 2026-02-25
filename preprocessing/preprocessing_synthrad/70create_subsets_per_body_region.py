@@ -33,7 +33,7 @@ def configure_paths(method: str):
     """Configure paths based on normalization method."""
     global ROOT
     
-    valid_methods = ["31baseline", "32p99", "33nyul", "34npeaks"]
+    valid_methods = ["31baseline", "32p99", "33nyul", "34normalized_n4_03LIC", "34normalized_n4_08LIC", "34normalized_n4_centerspecific_03LIC", "34normalized_n4_centerspecific_08LIC"]
     
     if method not in valid_methods:
         raise ValueError(
