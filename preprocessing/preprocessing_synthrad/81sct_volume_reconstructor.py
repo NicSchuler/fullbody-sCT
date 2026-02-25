@@ -6,15 +6,17 @@
 Reconstructs 3D NIfTI volumes from 2D NIfTI slices at original dimensions.
 
 Usage:
-    python 81sct_volume_reconstructor.py <model_region_folder> [--copy_originals]
+    python 81sct_volume_reconstructor.py <model_region_folder> [--copy_originals] [--patient-ids ...]
 
 Arguments:
     model_region_folder     Model/region folder name in 9latestTestImages (e.g., pix2pix_synthrad_allregion_final/test_50)
     --copy_originals        Optional: Copy original CT/MR files to output folder (default: False)
+    --patient-ids           Optional: Only process the specified patient IDs
 
 Examples:
     python 81sct_volume_reconstructor.py pix2pix_synthrad_allregion_final/test_50
     python 81sct_volume_reconstructor.py pix2pix_synthrad_allregion_final/test_50 --copy_originals
+    python 81sct_volume_reconstructor.py pix2pix_synthrad_allregion_final/test_50 --patient-ids AB_1ABA009 TH_1THA001
 
 This script:
     1. Reads NIfTI slices from 9latestTestImages/<model_region>/fake_nifti/
@@ -417,6 +419,10 @@ Examples:
       --resampled-dir /path/to/2resampledNifti \\
       --use-mr-reference
 
+  # Only process selected patients:
+  python 81sct_volume_reconstructor.py model_name/test_50 \\
+      --patient-ids AB_1ABA009 TH_1THA001
+
 Output Files:
   Always created:
     sCT_original_dim_reconstructed_alignment.nii.gz - Reconstructed sCT at original dimensions
@@ -471,6 +477,13 @@ IMPORTANT: The "reconstructed_alignment" naming indicates that spatial alignment
         help="Use MR as reference instead of CT (for inference mode)"
     )
 
+    parser.add_argument(
+        "--patient-ids",
+        nargs="+",
+        default=None,
+        help="Optional list of patient IDs to process (e.g., --patient-ids AB_1ABA009 TH_1THA001)"
+    )
+
     # Show available folders if no arguments
     if len(sys.argv) == 1:
         parser.print_help()
@@ -515,6 +528,7 @@ IMPORTANT: The "reconstructed_alignment" naming indicates that spatial alignment
     print(f"Output:                 {output_dir}")
     print(f"Copy originals:         {args.copy_originals}")
     print(f"Use MR reference:       {args.use_mr_reference}")
+    print(f"Patient filter:         {', '.join(args.patient_ids) if args.patient_ids else 'None (all patients)'}")
     print("=" * 80)
     print()
 
@@ -546,14 +560,32 @@ IMPORTANT: The "reconstructed_alignment" naming indicates that spatial alignment
 
     # Get all unique patient IDs
     all_patients = set(fake_slices.keys())
+    patients_to_process = set(all_patients)
+
+    # Optional patient filter
+    if args.patient_ids:
+        requested_patients = set(args.patient_ids)
+        patients_to_process = all_patients.intersection(requested_patients)
+        missing_patients = sorted(requested_patients - all_patients)
+        if missing_patients:
+            print(f"!WARNING! {len(missing_patients)} requested patient IDs not found in fake_nifti:")
+            for pid in missing_patients:
+                print(f"  - {pid}")
+            print()
 
     print(f"Found {len(all_patients)} patients")
     print(f"  - Fake slices: {sum(len(v) for v in fake_slices.values())} total")
+    print(f"  - Selected for processing: {len(patients_to_process)}")
     print()
+
+    if not patients_to_process:
+        print("ERROR: No patients selected for processing.")
+        print("Check --patient-ids values and slice filenames in fake_nifti.")
+        sys.exit(1)
 
     # Process each patient
     success_count = 0
-    for patient_id in tqdm(sorted(all_patients), desc="Reconstructing volumes"):
+    for patient_id in tqdm(sorted(patients_to_process), desc="Reconstructing volumes"):
         success = process_patient(
             patient_id,
             fake_slices.get(patient_id, {}),
@@ -570,7 +602,7 @@ IMPORTANT: The "reconstructed_alignment" naming indicates that spatial alignment
     print()
     print("=" * 80)
     print(f"Reconstruction complete!")
-    print(f"  Processed: {success_count}/{len(all_patients)} patients")
+    print(f"  Processed: {success_count}/{len(patients_to_process)} patients")
     print(f"  Output: {output_dir}")
     print()
     print("Each patient folder contains:")
