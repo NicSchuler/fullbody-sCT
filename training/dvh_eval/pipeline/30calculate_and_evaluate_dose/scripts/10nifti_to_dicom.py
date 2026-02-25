@@ -45,6 +45,19 @@ def _sorted_cases(ct_root: Path, sct_root: Path) -> list[str]:
     return shared
 
 
+def _case_output_complete(case_out: Path) -> bool:
+    """Return True when a case already has complete DICOM outputs."""
+    ct_dir = case_out / "CT"
+    sct_dir = case_out / "sCT"
+    rtstruct_file = case_out / "RTSTRUCT" / "rtstruct.dcm"
+
+    if not ct_dir.is_dir() or not sct_dir.is_dir():
+        return False
+    if not any(ct_dir.glob("*.dcm")) or not any(sct_dir.glob("*.dcm")):
+        return False
+    return rtstruct_file.exists()
+
+
 def _discover_model_dirs(data_root: Path) -> list[Path]:
     models = []
     for p in sorted(data_root.iterdir()):
@@ -377,6 +390,11 @@ def parse_args(argv: Iterable[str]) -> argparse.Namespace:
     )
     p.add_argument("--case", action="append", help="Case ID (repeatable). If omitted, all shared cases are processed.")
     p.add_argument("--build-rtstruct", action="store_true", help="Create RTSTRUCT from TS_CT masks.")
+    p.add_argument(
+        "--overwrite-existing",
+        action="store_true",
+        help="Recreate DICOM outputs even if a complete case output already exists.",
+    )
     return p.parse_args(list(argv))
 
 
@@ -414,6 +432,12 @@ def main(argv: Iterable[str]) -> int:
         for case_id in cases:
             model_case_dir = model_dir / case_id
             sct_nii = _find_sct_nifti(model_case_dir, case_id=case_id)
+            case_out = args.out_root / model_name / case_id
+
+            if not args.overwrite_existing and _case_output_complete(case_out):
+                print(f"[INFO] Skipping existing case output: {case_id} ({model_name})")
+                continue
+
             print(f"[INFO] Converting case: {case_id} ({model_name})")
             convert_case(
                 data_root=args.data_root,

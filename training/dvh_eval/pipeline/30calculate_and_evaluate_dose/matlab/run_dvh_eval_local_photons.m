@@ -26,7 +26,7 @@ dvhRef = resRef.dvh;
 qiRef = resRef.qi;
 
 % sCT dose calculation using CT-optimized weights
-resSynth = calc_forward_compat(ctSynth, cstRef, stf, pln, resRef.w);
+resSynth = calc_forward_with_retry(ctSynth, cstRef, stf, pln, resRef.w, params.caseId);
 resSynth = matRad_planAnalysis(resSynth, ctSynth, cstRef, stf, pln, 'showDVH', false, 'showQI', false);
 dvhSynth = resSynth.dvh;
 qiSynth = resSynth.qi;
@@ -141,6 +141,23 @@ if isfield(ctRef, 'resolution') && isfield(ctSynth, 'resolution')
         error('%s: CT/sCT resolution mismatch in matRad import', caseId);
     end
 end
+
+% Ensure physical grid vectors match, not just cube dimensions.
+if isfield(ctRef, 'x') && isfield(ctSynth, 'x')
+    if numel(ctRef.x) ~= numel(ctSynth.x) || any(abs(double(ctRef.x(:)) - double(ctSynth.x(:))) > 1e-3)
+        error('%s: CT/sCT x-grid mismatch in matRad import', caseId);
+    end
+end
+if isfield(ctRef, 'y') && isfield(ctSynth, 'y')
+    if numel(ctRef.y) ~= numel(ctSynth.y) || any(abs(double(ctRef.y(:)) - double(ctSynth.y(:))) > 1e-3)
+        error('%s: CT/sCT y-grid mismatch in matRad import', caseId);
+    end
+end
+if isfield(ctRef, 'z') && isfield(ctSynth, 'z')
+    if numel(ctRef.z) ~= numel(ctSynth.z) || any(abs(double(ctRef.z(:)) - double(ctSynth.z(:))) > 1e-3)
+        error('%s: CT/sCT z-grid mismatch in matRad import', caseId);
+    end
+end
 end
 
 function cube = get_ct_cube(ct)
@@ -206,4 +223,22 @@ end
 
 % Legacy fallback
 resultGUI = matRad_calcDoseDirect(ct, stf, pln, cst, w);
+end
+
+function resultGUI = calc_forward_with_retry(ct, cst, stf, pln, w, caseId)
+try
+    resultGUI = calc_forward_compat(ct, cst, stf, pln, w);
+catch ME
+    if contains(ME.message, 'Error in SSD calculation')
+        warning('%s: SSD calculation failed on sCT forward pass. Retrying with relaxed ssdDensityThreshold=-1.', caseId);
+        plnRetry = pln;
+        if ~isfield(plnRetry, 'propDoseCalc') || ~isstruct(plnRetry.propDoseCalc)
+            plnRetry.propDoseCalc = struct();
+        end
+        plnRetry.propDoseCalc.ssdDensityThreshold = -1;
+        resultGUI = calc_forward_compat(ct, cst, stf, plnRetry, w);
+    else
+        rethrow(ME);
+    end
+end
 end

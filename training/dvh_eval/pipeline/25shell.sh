@@ -7,15 +7,18 @@
 
 
 folders=(
-    #2_experiment_cut_synthrad_abdomen_32p99
-    2_experiment_cut_synthrad_abdomen_33nyul
-    2_experiment_cut_synthrad_abdomen_sep_first_layer
-    2_experiment_cyclegan_abdomen_32p99
-    2_experiment_cyclegan_abdomen_33nyul
-    2_experiment_cyclegan_abdomen_sep_first_layer
-    2_experiment_pix2pix_synthrad_abdomen_32p99
-    2_experiment_pix2pix_synthrad_abdomen_33nyul
-    2_experiment_pix2pix_synthrad_abdomen_sep_input_layers
+    2_experiment_cut_synthrad_abdomen_34normalized_n4_03LIC
+    2_experiment_cut_synthrad_abdomen_34normalized_n4_08LIC
+    2_experiment_cut_synthrad_abdomen_34normalized_n4_centerspecific_03LIC
+    2_experiment_cut_synthrad_abdomen_34normalized_n4_centerspecific_08LIC
+    2_experiment_cyclegan_abdomen_34normalized_n4_08LIC
+    2_experiment_cyclegan_abdomen_34normalized_n4_03LIC
+    2_experiment_cyclegan_abdomen_34normalized_n4_centerspecific_03LIC
+    2_experiment_cyclegan_abdomen_34normalized_n4_centerspecific_08LIC
+    2_experiment_pix2pix_synthrad_abdomen_34normalized_n4_03LIC
+    2_experiment_pix2pix_synthrad_abdomen_34normalized_n4_08LIC
+    2_experiment_pix2pix_synthrad_abdomen_34normalized_n4_centerspecific_03LIC
+    2_experiment_pix2pix_synthrad_abdomen_34normalized_n4_centerspecific_08LIC
 )
 for f in "${folders[@]}"; do
     echo "Running: $f"

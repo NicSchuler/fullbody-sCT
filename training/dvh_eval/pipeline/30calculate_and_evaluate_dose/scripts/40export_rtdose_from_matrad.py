@@ -146,9 +146,18 @@ def _build_rtdose(
 
 
 def export_case(case_results_dir: Path, case_ct_dir: Path) -> None:
+    out_ct = case_results_dir / "dose_ct.dcm"
+    out_sct = case_results_dir / "dose_sct.dcm"
+
+    # Default behavior: do not recreate RTDOSE if both outputs already exist.
+    if out_ct.exists() and out_sct.exists():
+        print(f"[INFO] Skipping existing RTDOSE files in {case_results_dir}")
+        return
+
     mat_file = case_results_dir / "matrad_workspace.mat"
     if not mat_file.exists():
-        raise FileNotFoundError(f"Missing {mat_file}")
+        print(f"[WARN] Missing {mat_file}; skipping case.")
+        return
 
     ct_slices = _load_ct_series(case_ct_dir)
 
@@ -158,11 +167,15 @@ def export_case(case_results_dir: Path, case_ct_dir: Path) -> None:
     ds_ct = _build_rtdose(dose_ct, ct_slices, "CT dose")
     ds_sct = _build_rtdose(dose_sct, ct_slices, "sCT dose")
 
-    out_ct = case_results_dir / "dose_ct.dcm"
-    out_sct = case_results_dir / "dose_sct.dcm"
+    if not out_ct.exists():
+        ds_ct.save_as(str(out_ct), write_like_original=False)
+    else:
+        print(f"[INFO] RTDOSE already exists, not overwriting: {out_ct}")
 
-    ds_ct.save_as(str(out_ct), write_like_original=False)
-    ds_sct.save_as(str(out_sct), write_like_original=False)
+    if not out_sct.exists():
+        ds_sct.save_as(str(out_sct), write_like_original=False)
+    else:
+        print(f"[INFO] RTDOSE already exists, not overwriting: {out_sct}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -194,9 +207,11 @@ def main() -> int:
 
             ct_dir = args.dicom_root / model / case / "CT"
             print(f"[INFO] Exporting RTDOSE for {model}/{case}")
-            export_case(case_dir, ct_dir)
-            print(f"[INFO] Wrote: {case_dir / 'dose_ct.dcm'}")
-            print(f"[INFO] Wrote: {case_dir / 'dose_sct.dcm'}")
+            try:
+                export_case(case_dir, ct_dir)
+            except Exception as exc:
+                print(f"[WARN] Failed for {model}/{case}: {exc}")
+                continue
 
     return 0
 

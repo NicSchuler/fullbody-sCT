@@ -15,7 +15,7 @@ excludeModels = {
     '2_experiment_pix2pix_synthrad_abdomen_32p99',
     '2_experiment_pix2pix_synthrad_abdomen_sep_input_layers'
 };
-includePattern = '34normalized_n4';
+includePattern = 'pix2pix_synthrad_abdomen_34normalized_n4';
 skipIfResultsExist = true;
 
 thisFile = mfilename('fullpath');
