@@ -158,7 +158,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         "normalization_method",
         nargs="?",
         default="32p99",
-        choices=["31baseline", "32p99", "33nyul", "34npeaks"],
+        choices=["31baseline", "32p99", "33nyul", "34normalized_n4_03LIC", "34normalized_n4_08LIC", "34normalized_n4_centerspecific_03LIC", "34normalized_n4_centerspecific_08LIC"],
         help="Normalization method (default: 32p99). Automatically configures slices-root and out-dir.",
     )
     p.add_argument(
