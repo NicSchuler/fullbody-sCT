@@ -9,23 +9,31 @@
 python 20resampling.py
 # Output: 2resampledNifti/
 
-# Step 2: Apply normalization (Abdomen only)
+# Step 1b: TotalSegmentator masks on init NIfTI (required by step 22 / npeaks)
+python 13run_totalsegmentator.py
+# Output: 1initNifti/<CASE>/<MODALITY>/totalsegmentator_output/
+
+# Step 2: Resample TotalSegmentator masks to 2resampledNifti
+python 22resample_totalsegmentator_masks.py
+# Output: 2resampledNifti/<CASE>/totalsegmentator_masks/
+
+# Step 3: Apply normalization (Abdomen only)
 python 32perfile_p99_standardization.py
 # Output: 32p99/3normalized/ (Abdomen cases only)
 
-# Step 3: Create 2D slices
+# Step 4: Create 2D slices
 python 40slice_creator.py 32p99
 # Output: 32p99/5slices/
 
-# Step 4: Split into train/val/test
+# Step 5: Split into train/val/test
 python 50_split_folderstructure.py 32p99
 # Output: 32p99/6materialized_splits/
 
-# Step 5: Create A+B combined images for pix2pix
+# Step 6: Create A+B combined images for pix2pix
 python 60combine_A_B_for_pix2pix.py 32p99
 # Output: 32p99/6materialized_splits/pix2pix/AB/
 
-# Step 6: Create body-region subsets
+# Step 7: Create body-region subsets
 python 70create_subsets_per_body_region.py 32p99
 # Output: 32p99/7materialized_splits_BodyRegion/
 ```
@@ -36,7 +44,13 @@ python 70create_subsets_per_body_region.py 32p99
 # Step 1: Resampling (run once)
 python 20resampling.py
 
-# Step 2-6: For each normalization method
+# Step 1b: TotalSegmentator masks on init NIfTI (run once)
+python 13run_totalsegmentator.py
+
+# Step 2: Resample TotalSegmentator masks (run once)
+python 22resample_totalsegmentator_masks.py
+
+# Step 3-7: For each normalization method
 for method in 31baseline 32p99 33nyul 34npeaks; do
     echo "Processing normalization method: $method"
     
@@ -165,6 +179,7 @@ Synthrad_combined_preprocessed/
 ## Notes
 
 - **Default method**: If you don't specify a method, scripts default to `32p99`
+- **TotalSegmentator placement**: Run `13run_totalsegmentator.py` after init NIfTI creation and before `22resample_totalsegmentator_masks.py`
 - **Abdomen filtering**: All normalization methods (32p99, 33nyul, 34npeaks) process **abdomen data only** (AB_* prefix)
   - Exception: `31baseline` has `--all-data` flag to process all body regions
 - **Run once**: `20resampling.py` only needs to be run once
