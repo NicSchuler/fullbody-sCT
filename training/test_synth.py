@@ -69,10 +69,16 @@ from pathlib import Path
 from tqdm import tqdm 
 # from pytorch_fid import fid_score
 
+BASE_ROOT = os.environ.get(
+    "SYNTHRAD_BASE_ROOT",
+    "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed",
+)
+
 # ---- body mask config ----
 use_mask = True  # set True to use masks when computing metrics
-mask_slice_base_dir = os.path.join(
-    "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/5slices_31baseline/masks"
+mask_slice_base_dir = os.environ.get(
+    "SYNTHRAD_MASK_SLICE_DIR",
+    os.path.join(BASE_ROOT, "5slices_31baseline", "masks"),
 )
 
 
@@ -110,7 +116,8 @@ if __name__ == '__main__':
     skipped_zero_mask_rows = 0
 
     results_path = os.path.join(
-        "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/9latestTestImages",
+        BASE_ROOT,
+        "9latestTestImages",
         opt.name,
         '{}_{}'.format(opt.phase, opt.epoch),
     )

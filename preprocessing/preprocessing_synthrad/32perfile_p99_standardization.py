@@ -10,6 +10,7 @@ for MRI using 99th percentile of foreground voxels.
 Note: This script processes ABDOMEN data only (AB_* prefix).
 """
 
+import argparse
 import numpy as np
 import SimpleITK as sitk
 from pathlib import Path
@@ -123,30 +124,49 @@ def process_case(case_dir: Path, out_root: Path):
     print(f"[OK] {case_id}")
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Apply per-file p99 normalization to resampled NIfTI volumes."
+    )
+    parser.add_argument("--src-root", type=str, default=None, help=f"Input directory (default: {src_root})")
+    parser.add_argument("--out-root", type=str, default=None, help=f"Output directory (default: {out_root})")
+    parser.add_argument("--all-data", action="store_true", help="Process all body regions, not just abdomen")
+    parser.add_argument("--patient-ids", nargs="+", default=None, help="Specific patient IDs to process")
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
+    input_root = Path(args.src_root) if args.src_root else src_root
+    output_root = Path(args.out_root) if args.out_root else out_root
     count = 0
-    
-    # Filter for abdomen only (AB_* prefix)
-    all_dirs = [d for d in src_root.iterdir() if d.is_dir()]
-    case_dirs = [d for d in all_dirs if d.name.startswith("AB_")]
+
+    if args.patient_ids:
+        case_dirs = [input_root / pid for pid in args.patient_ids if (input_root / pid).is_dir()]
+    else:
+        all_dirs = [d for d in input_root.iterdir() if d.is_dir()]
+        if args.all_data:
+            case_dirs = sorted(all_dirs)
+        else:
+            case_dirs = sorted([d for d in all_dirs if d.name.startswith("AB_")])
     total = len(case_dirs)
-    
+
     print(f"Starting 32 Per-File P99 Standardization")
-    print(f"Input:  {src_root}")
-    print(f"Output: {out_root}")
-    print(f"Filter: Abdomen only (AB_*)")
-    print(f"Cases:  {total} abdomen cases")
+    print(f"Input:  {input_root}")
+    print(f"Output: {output_root}")
+    print(f"Filter: {'All body regions' if args.all_data else 'Abdomen only (AB_*)'}")
+    print(f"Cases:  {total}")
     print(f"CT:  [-1024, 1200] HU → [0, 1]")
     print(f"MRI: Per-file p99 normalization → [0, 1]")
     print("-" * 60)
-    
-    for case_dir in sorted(case_dirs):
-        process_case(case_dir, out_root)
+
+    for case_dir in case_dirs:
+        process_case(case_dir, output_root)
         count += 1
-        
+
         if count % 25 == 0:
             print(f"Processed {count}/{total} cases...")
-    
+
     print(f"\nCompleted: {count}/{total} cases processed")
 
 

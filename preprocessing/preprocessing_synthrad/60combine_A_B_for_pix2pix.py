@@ -1,6 +1,6 @@
 """
 Usage:
-    python 60combine_A_B_for_pix2pix.py [normalization_method]
+    python 60combine_A_B_for_pix2pix.py [normalization_method] [--base-root /path/to/base]
 
 Examples:
     python 60combine_A_B_for_pix2pix.py 31baseline
@@ -10,6 +10,7 @@ Examples:
 
 If no argument is provided, uses default: 32p99
 """
+import argparse
 import sys
 from pathlib import Path
 
@@ -128,13 +129,30 @@ def create_pairs(root: Path):
             #print(f"  Saved: {out_path.name}")
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Create A+B pairs for pix2pix.")
+    parser.add_argument(
+        "normalization_method",
+        nargs="?",
+        default=NORMALIZATION_METHOD,
+        help="Normalization method",
+    )
+    parser.add_argument(
+        "--base-root",
+        type=Path,
+        default=BASE_ROOT,
+        help="Base preprocessing root containing method folders",
+    )
+    return parser.parse_args()
+
+
 def main():
-    global NORMALIZATION_METHOD
-    
-    # Parse command line argument if provided
-    if len(sys.argv) > 1:
-        NORMALIZATION_METHOD = sys.argv[1]
-    
+    global NORMALIZATION_METHOD, BASE_ROOT
+
+    args = parse_args()
+    NORMALIZATION_METHOD = args.normalization_method
+    BASE_ROOT = args.base_root
+
     # Configure paths based on normalization method
     configure_paths(NORMALIZATION_METHOD)
     

@@ -13,8 +13,10 @@ The transformations include:
 
 Usage:
     python 22resample_totalsegmentator_masks.py
+    python 22resample_totalsegmentator_masks.py --src-root /path/to/1initNifti --out-root /path/to/2resampledNifti
 """
 
+import argparse
 import numpy as np
 import SimpleITK as sitk
 from pathlib import Path
@@ -314,21 +316,62 @@ def process_totalsegmentator_masks(case_dir: Path, out_case_dir: Path):
         sitk.WriteImage(out_mask, str(out_path), useCompression=save_zipped)
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Resample TotalSegmentator masks to match resampled images."
+    )
+    parser.add_argument(
+        "--src-root",
+        type=str,
+        default=None,
+        help=f"Input 1initNifti root (default: {src_root})",
+    )
+    parser.add_argument(
+        "--out-root",
+        type=str,
+        default=None,
+        help=f"Output 2resampledNifti root (default: {out_root})",
+    )
+    parser.add_argument(
+        "--patient-ids",
+        nargs="+",
+        default=None,
+        help="Specific patient IDs to process (default: all abdomen cases)",
+    )
+    parser.add_argument(
+        "--all-data",
+        action="store_true",
+        help="Process all body regions instead of only abdomen cases",
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
+    input_root = Path(args.src_root) if args.src_root else src_root
+    output_root = Path(args.out_root) if args.out_root else out_root
+
     print("=" * 60)
     print("Resampling TotalSegmentator Masks")
     print("=" * 60)
-    print(f"Source: {src_root}")
-    print(f"Output: {out_root}")
+    print(f"Source: {input_root}")
+    print(f"Output: {output_root}")
     print(f"Masks to process: {TOTALSEGMENTATOR_MASKS}")
     print()
-    
-    # Process only abdomen cases (AB_* prefix)
-    cases = sorted([d for d in src_root.iterdir() if d.is_dir() and d.name.startswith("AB_")])
-    print(f"Found {len(cases)} abdomen cases to process")
+
+    if args.patient_ids:
+        cases = [input_root / patient_id for patient_id in args.patient_ids if (input_root / patient_id).is_dir()]
+    else:
+        all_cases = [d for d in input_root.iterdir() if d.is_dir()]
+        if args.all_data:
+            cases = sorted(all_cases)
+        else:
+            cases = sorted([d for d in all_cases if d.name.startswith("AB_")])
+
+    print(f"Found {len(cases)} case(s) to process")
     
     for case_dir in tqdm(cases, desc="Processing cases"):
-        out_case_dir = out_root / case_dir.name
+        out_case_dir = output_root / case_dir.name
         process_totalsegmentator_masks(case_dir, out_case_dir)
     
     print("\nDone!")

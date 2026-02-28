@@ -13,8 +13,8 @@ UNMASKED_METRICS = [f"{m}_unmasked" for m in BASE_METRICS]
 MASKED_METRICS = [f"{m}_masked" for m in BASE_METRICS]
 ALL_METRICS = [*UNMASKED_METRICS, *MASKED_METRICS]
 # Usage:
-#   python preprocessing/preprocessing_synthrad/110compute_volume_metrics.py
-#   python preprocessing/preprocessing_synthrad/110compute_volume_metrics.py --root /path/to/100results
+#   python postprocessing/110compute_volume_metrics.py
+#   python postprocessing/110compute_volume_metrics.py --root /path/to/100results
 
 DEFAULT_ROOT = Path(
     "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/100results"

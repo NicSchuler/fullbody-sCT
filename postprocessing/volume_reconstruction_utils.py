@@ -7,6 +7,7 @@ Shared utility functions for volume reconstruction scripts.
 Used by 81sct_volume_reconstructor.py and 82resampled_to_original.py.
 """
 
+import os
 from pathlib import Path
 
 import numpy as np
@@ -15,7 +16,12 @@ import SimpleITK as sitk
 
 # ===================== CONFIG =====================
 
-BASE_ROOT = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed")
+BASE_ROOT = Path(
+    os.environ.get(
+        "SYNTHRAD_BASE_ROOT",
+        "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed",
+    )
+)
 TEST_IMAGES_DIR = BASE_ROOT / "9latestTestImages"
 RESAMPLED_DIR = BASE_ROOT / "2resampledNifti"
 INIT_DIR = BASE_ROOT / "1initNifti"

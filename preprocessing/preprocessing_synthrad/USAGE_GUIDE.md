@@ -191,21 +191,34 @@ Synthrad_combined_preprocessed/
 
 # Postprocessing
 
-## 80: Volume Creator
-Reconstructs 3D NIfTI volumes from 2D NIfTI slices generated during testing. Stacks slices at 256x256 resolution and optionally reconstructs volumes at original patient-specific dimensions through reverse resampling.
+All postprocessing scripts now live in `postprocessing/`.
+
+## 81: sCT Volume Reconstructor
+Reconstructs 3D sCT NIfTI volumes from 2D test slices and restores them to original patient dimensions through reverse resampling.
 
 ```bash
-# Basic usage: reconstruct sCT volumes at both 256x256 and original dimensions
-python ./80volume_creator.py pix2pix_synthrad_allregions
+# Basic usage
+python postprocessing/81sct_volume_reconstructor.py \
+    pix2pix_synthrad_allregions/test_50
 
-# With all options: copy original CT/MR files and create validation volumes
-python ./80volume_creator.py pix2pix_synthrad_allregions --copy_originals --reconstruct_original
+# Also copy original CT/MR files for comparison
+python postprocessing/81sct_volume_reconstructor.py \
+    pix2pix_synthrad_allregions/test_50 --copy_originals
 ```
 
-**Output files** (per patient):
-- `sCT_256_dim.nii.gz` - Reconstructed sCT at 256x256 resolution
-- `sCT_original_dim_mask_not_aligned.nii.gz` - sCT at original dimensions
-- With `--copy_originals`: Original CT/MR files from both resampled and initial data
-- With `--reconstruct_original`: Validation volume showing CT after preprocessing round-trip
+## 82: Resampled To Original
+Converts all volumes in `2resampledNifti` back to original `1initNifti` dimensions.
 
-**Important**: Volumes at original dimensions are NOT aligned with original masks. Safe for dosimetric analysis, but not for image-level comparison with masked regions.
+```bash
+python postprocessing/82resampled_to_original.py
+python postprocessing/82resampled_to_original.py \
+    --patients AB_1ABA009 AB_1ABA010
+```
+
+## 110-111: Metrics Helpers
+Utility scripts for aggregate metrics and CSV cleanup.
+
+```bash
+python postprocessing/110compute_volume_metrics.py
+python postprocessing/111cleanup_zero_mask_rows.py --dry-run
+```

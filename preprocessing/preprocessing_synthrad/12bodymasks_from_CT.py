@@ -84,23 +84,40 @@ def process_modality_body_mask_thresholding_only(nii_image, path_nifti, outname,
     return mask_threshold
 
 
-def main(prefix=None, position=0):
-    os.chdir("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/1initNifti")
-    all_patients = os.listdir()
+def main(input_root=None, prefix=None, patient_ids=None, position=0):
+    root = input_root or "/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/1initNifti"
+    os.chdir(root)
+    all_patients = [name for name in os.listdir() if os.path.isdir(name)]
 
-    if prefix:
+    if patient_ids:
+        requested = set(patient_ids)
+        patients = [pat for pat in all_patients if pat in requested]
+    elif prefix:
         patients = [pat for pat in all_patients if pat.startswith(prefix)]
     else:
         patients = all_patients
 
     for patient in tqdm(sorted(patients), position=position):
-        input_path = f"{patient}/CT_reg/{patient}_CT_reg.nii.gz"
+        ct_dir = os.path.join(patient, "CT_reg")
+        input_path = None
+        for candidate in (
+            os.path.join(ct_dir, f"{patient}_CT_reg.nii.gz"),
+            os.path.join(ct_dir, f"{patient}_CT_reg.nii"),
+        ):
+            if os.path.exists(candidate):
+                input_path = candidate
+                break
+
+        if input_path is None:
+            print(f"[SKIP] Missing CT for {patient}")
+            continue
+
         output_path = f"{patient}/new_masks"
         output_name = f"{patient}_mask_from_CT_treshold.nii.gz"
 
         nii_image = nib.load(input_path)
         os.makedirs(output_path, exist_ok=True)
-        new_mask = process_modality_body_mask_thresholding_only(nii_image, output_path, output_name, THRESHOLD_CT)
+        process_modality_body_mask_thresholding_only(nii_image, output_path, output_name, THRESHOLD_CT)
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser(
@@ -117,6 +134,22 @@ if __name__=="__main__":
     "--position", type=int, default=0,
     help="tqdm bar position for parallel runs."
     )
+    parser.add_argument(
+        "--input-root",
+        default=None,
+        help="Root containing 1initNifti patient folders.",
+    )
+    parser.add_argument(
+        "--patient-ids",
+        nargs="+",
+        default=None,
+        help="Specific patient IDs to process.",
+    )
 
     args = parser.parse_args()
-    main(prefix=args.prefix, position=args.position)
+    main(
+        input_root=args.input_root,
+        prefix=args.prefix,
+        patient_ids=args.patient_ids,
+        position=args.position,
+    )
