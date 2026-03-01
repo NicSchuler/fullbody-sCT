@@ -8,8 +8,8 @@ python "${SCRIPT_DIR}/run_pipeline.py" \
   --subfolder-name testPipeline \
   --body-part-filter AB \
   --patient-filter 1ABA005 1ABA030 1ABA047 \
-  --preprocessing-method 32p99 \
-  --method CUT \
+  --preprocessing-method 34normalized_n4_08LIC \
+  --method cycleGAN \
   --epochs 50 \
   --batch-size 1 \
   --start 30
