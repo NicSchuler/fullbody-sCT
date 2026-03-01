@@ -45,6 +45,7 @@ Renname folders for npeaks_analysis
 !!!!!!!!!!
 """
 
+import argparse
 import os
 import sys
 import shutil
@@ -143,6 +144,38 @@ ENABLE_VISUALIZATION = True  # Save normalization visualization plots per patien
 
 # Limit patients for testing (None = all)
 MAX_PATIENTS = None
+
+METHOD_CONFIGS = {
+    "34npeaks": {
+        "n4_passes": 0,
+        "lic_threshold_quantile": 0.8,
+        "center_specific": False,
+    },
+    "34normalized_n4_03LIC": {
+        "n4_passes": 2,
+        "lic_threshold_quantile": 0.3,
+        "center_specific": False,
+    },
+    "34normalized_n4_08LIC": {
+        "n4_passes": 2,
+        "lic_threshold_quantile": 0.8,
+        "center_specific": False,
+    },
+    "34normalized_n4_centerspecific_03LIC": {
+        "n4_passes": 2,
+        "lic_threshold_quantile": 0.3,
+        "center_specific": True,
+    },
+    "34normalized_n4_centerspecific_08LIC": {
+        "n4_passes": 2,
+        "lic_threshold_quantile": 0.8,
+        "center_specific": True,
+    },
+}
+
+
+def method_folder_name(method: str) -> str:
+    return f"3_{method}"
 
 # =============================================================================
 # FUNCTIONS
@@ -471,24 +504,79 @@ def normalize_patient(patient_id, resampled_dir, output_dir, target_intensities,
 # MAIN
 # =============================================================================
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Run N-peaks MRI normalization.")
+    parser.add_argument(
+        "--method",
+        choices=sorted(METHOD_CONFIGS),
+        default="34normalized_n4_centerspecific_08LIC",
+        help="N-peaks configuration to run.",
+    )
+    parser.add_argument(
+        "--base-root",
+        type=Path,
+        default=DATA_BASE,
+        help="Pipeline base root.",
+    )
+    parser.add_argument(
+        "--src-root",
+        type=Path,
+        default=None,
+        help="Resampled input root (defaults to <base-root>/2resampledNifti).",
+    )
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        default=None,
+        help="Split manifest CSV (defaults to <base-root>/splits_manifest.csv).",
+    )
+    parser.add_argument(
+        "--out-root",
+        type=Path,
+        default=None,
+        help="Normalized output root (defaults to <base-root>/<method>/3normalized).",
+    )
+    parser.add_argument(
+        "--patient-ids",
+        nargs="+",
+        default=None,
+        help="Optional patient IDs to normalize.",
+    )
+    parser.add_argument(
+        "--disable-visualization",
+        action="store_true",
+        help="Skip saving normalization plots.",
+    )
+    parser.add_argument(
+        "--max-patients",
+        type=int,
+        default=None,
+        help="Optional limit for debugging.",
+    )
+    return parser.parse_args()
+
+
 def main():
+    global DATA_BASE, RESAMPLED_DIR, SPLITS_MANIFEST
+    global N4_PASSES, LIC_THRESHOLD_QUANTILE, CENTER_SPECIFIC
+    global ENABLE_VISUALIZATION, MAX_PATIENTS
+
+    args = parse_args()
+    config = METHOD_CONFIGS[args.method]
+    DATA_BASE = args.base_root
+    RESAMPLED_DIR = args.src_root if args.src_root is not None else DATA_BASE / "2resampledNifti"
+    SPLITS_MANIFEST = args.manifest if args.manifest is not None else DATA_BASE / "splits_manifest.csv"
+    N4_PASSES = config["n4_passes"]
+    LIC_THRESHOLD_QUANTILE = config["lic_threshold_quantile"]
+    CENTER_SPECIFIC = config["center_specific"]
+    ENABLE_VISUALIZATION = not args.disable_visualization
+    MAX_PATIENTS = args.max_patients
+
     print("=" * 70)
     print("N-PEAKS BATCH NORMALIZATION")
     print("=" * 70)
 
-    # Build output suffix
-    if N4_PASSES == 0:
-        output_suffix = "npeaks"
-    elif N4_PASSES == 1:
-        output_suffix = "n4_npeaks"
-    else:
-        output_suffix = f"n4x{N4_PASSES}_npeaks"
-    if USE_ZERO_ANCHOR:
-        output_suffix += "_zeroanchor"
-    if CENTER_SPECIFIC:
-        output_suffix += "_centerspecific"
-
-    OUTPUT_DIR = DATA_BASE / f"experiment2/34normalized_{output_suffix}/3normalized"
+    OUTPUT_DIR = args.out_root if args.out_root is not None else DATA_BASE / method_folder_name(args.method) / "3normalized"
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     # Print configuration
@@ -503,8 +591,13 @@ def main():
     print(f"  Output directory: {OUTPUT_DIR}")
 
     # Get ALL abdomen patients for normalization
-    all_patients = sorted([d.name for d in RESAMPLED_DIR.iterdir()
-                           if d.is_dir() and d.name.startswith(f"{BODY_REGION}_")])
+    all_patients = sorted(
+        d.name for d in RESAMPLED_DIR.iterdir()
+        if d.is_dir() and d.name.startswith(f"{BODY_REGION}_")
+    )
+    if args.patient_ids:
+        selected = set(args.patient_ids)
+        all_patients = [patient_id for patient_id in all_patients if patient_id in selected]
     print(f"\nFound {len(all_patients)} {BODY_REGION} patients to normalize")
 
     # Get train patients for computing targets (if needed)
@@ -514,6 +607,9 @@ def main():
             p for p in manifest_patients
             if (RESAMPLED_DIR / p).is_dir()
         ])
+        if args.patient_ids:
+            selected = set(args.patient_ids)
+            train_patients = [patient_id for patient_id in train_patients if patient_id in selected]
         print(f"Using {len(train_patients)} train patients for computing targets")
     else:
         train_patients = all_patients
@@ -521,6 +617,9 @@ def main():
 
     if MAX_PATIENTS:
         all_patients = all_patients[:MAX_PATIENTS]
+
+    if not all_patients:
+        raise SystemExit(f"No patients found under {RESAMPLED_DIR} for {args.method}")
 
     # Center-specific normalization
     if CENTER_SPECIFIC:

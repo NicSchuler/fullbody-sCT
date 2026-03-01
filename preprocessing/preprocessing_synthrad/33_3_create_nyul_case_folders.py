@@ -10,8 +10,8 @@ This script:
 
 Default layout (experiment2):
   baseline: /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/experiment2/31baseline/3normalized
-  nyul:     /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/experiment2/33nyul/3normalized
-  output:   /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/experiment2/33nyul/3normalized_by_case
+  nyul:     /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/experiment2/3_33nyul/3normalized
+  output:   /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/experiment2/3_33nyul/3normalized_by_case
 
 Usage:
   python 35_create_nyul_case_folders.py
@@ -67,12 +67,12 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--nyul-root",
-        default=str(default_base / "experiment2" / "33nyul" / "3_2normalized"),
+        default=str(default_base / "experiment2" / "3_33nyul" / "3_2normalized"),
         help="Nyul normalized MR folder (flat files)",
     )
     p.add_argument(
         "--out-root",
-        default=str(default_base / "experiment2" / "33nyul" / "3normalized"),
+        default=str(default_base / "experiment2" / "3_33nyul" / "3normalized"),
         help="Output root for per-patient layout",
     )
     p.add_argument(

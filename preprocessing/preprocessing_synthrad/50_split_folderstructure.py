@@ -23,7 +23,6 @@ Usage:
     # Or specify different method:
     python 50_split_folderstructure.py 31baseline
     python 50_split_folderstructure.py 33nyul
-    python 50_split_folderstructure.py 34npeaks
 
     # Or override paths manually:
     python 50_split_folderstructure.py \
@@ -52,6 +51,10 @@ from shutil import copy2
 
 # Regex: extract a patient token like 1ABA005, 1HND012, 1BA123, 1PC045
 RE_TOKEN = re.compile(r"1(?:AB|HN|TH|B|P)?[A-D]?[0-9]{3}")
+
+
+def method_folder_name(method: str) -> str:
+    return f"3_{method}"
 
 
 def extract_token(text: str) -> Optional[str]:
@@ -189,10 +192,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     args = p.parse_args(argv)
     
     # Auto-configure paths based on normalization method if not explicitly provided
+    method_dir = method_folder_name(args.normalization_method)
     if args.slices_root is None:
-        args.slices_root = str(DEFAULT_BASE / args.normalization_method / "5slices")
+        args.slices_root = str(DEFAULT_BASE / method_dir / "5slices")
     if args.out_dir is None:
-        args.out_dir = str(DEFAULT_BASE / args.normalization_method / "6materialized_splits")
+        args.out_dir = str(DEFAULT_BASE / method_dir / "6materialized_splits")
     
     return args
 

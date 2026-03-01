@@ -4,16 +4,16 @@ Default experiment layout:
     Input cases (resampled only, no normalization):
         /.../2resampledNifti/<PATIENT_ID>/{MR,new_masks}/*.nii.gz
     Outputs (Nyul-ready):
-        /.../experiment2/33nyul/3_1NiftiNyulReady/trainingforcalc/{MR,masks}/<PATIENT>_*.nii.gz
+        /.../experiment2/3_33nyul/3_1NiftiNyulReady/trainingforcalc/{MR,masks}/<PATIENT>_*.nii.gz
             - contains TRAIN only (used to fit Nyul)
-        /.../experiment2/33nyul/3_1NiftiNyulReady/valtest/{MR,masks}/<PATIENT>_*.nii.gz
+        /.../experiment2/3_33nyul/3_1NiftiNyulReady/valtest/{MR,masks}/<PATIENT>_*.nii.gz
             - contains VAL + TEST (later normalized with train-fit mapping)
 
 Usage:
     python 33_1prepare_for_nyul.py \
         --base-root     /local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed \
         --input-root    /local/.../2resampledNifti \
-        --output-root   /local/.../experiment2/33nyul/3_1NiftiNyulReady \
+        --output-root   /local/.../experiment2/3_33nyul/3_1NiftiNyulReady \
         --manifest      /local/.../splits_manifest.csv
 
 Optional:
@@ -48,7 +48,7 @@ def extract_token(text: str) -> Optional[str]:
 
 DEFAULT_BASE = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed")
 DEFAULT_INPUT_ROOT = DEFAULT_BASE  / "2resampledNifti"
-DEFAULT_OUTPUT_ROOT = DEFAULT_BASE / "experiment2" / "33nyul" / "3_1NiftiNyulReady"
+DEFAULT_OUTPUT_ROOT = DEFAULT_BASE / "experiment2" / "3_33nyul" / "3_1NiftiNyulReady"
 
 
 def parse_args():

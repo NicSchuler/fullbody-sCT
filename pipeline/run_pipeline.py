@@ -20,12 +20,10 @@ TRAINING_CUT_DIR = REPO_ROOT / "training_cut"
 POSTPROC_DIR = REPO_ROOT / "postprocessing"
 DVH_DIR = TRAINING_DIR / "dvh_eval" / "pipeline"
 
-SUPPORTED_NORMALIZATION_RUNNERS = {"31baseline", "32p99"}
 KNOWN_NORMALIZATION_METHODS = {
     "31baseline",
     "32p99",
     "33nyul",
-    "34npeaks",
     "34normalized_n4_03LIC",
     "34normalized_n4_08LIC",
     "34normalized_n4_centerspecific_03LIC",
@@ -152,6 +150,10 @@ def sanitize_token(value: str) -> str:
     for ch in value:
         chars.append(ch if ch.isalnum() or ch in {"-", "_"} else "_")
     return "".join(chars).strip("_")
+
+
+def method_folder_name(method: str) -> str:
+    return f"3_{method}"
 
 
 def derive_scope(body_part_filter: str | None) -> str:
@@ -361,7 +363,7 @@ def load_test_patients(manifest_path: Path) -> list[str]:
 
 
 def normalization_root(base_root: Path, method: str) -> Path:
-    return base_root / method / "3normalized"
+    return base_root / method_folder_name(method) / "3normalized"
 
 
 def verify_normalization_available(args: argparse.Namespace, base_root: Path) -> Path:
@@ -378,13 +380,124 @@ def verify_normalization_available(args: argparse.Namespace, base_root: Path) ->
     return norm_root
 
 
+def run_normalization_step(
+    args: argparse.Namespace,
+    *,
+    base_root: Path,
+    resampled_root: Path,
+    manifest_path: Path,
+    normalized_root: Path,
+    selected_patients: list[str] | None,
+    env_base: dict[str, str],
+) -> None:
+    method = args.preprocessing_method
+
+    if method == "31baseline":
+        cmd = [
+            args.python,
+            str(PREPROC_DIR / "31baseline_standardization.py"),
+            "--src-root", str(resampled_root),
+            "--out-root", str(normalized_root),
+        ]
+        if selected_patients:
+            cmd.extend(["--patient-ids", *selected_patients])
+        elif args.body_part_filter is None:
+            cmd.append("--all-data")
+        run_command(cmd, cwd=PREPROC_DIR, env=env_base, label="STEP 30")
+        return
+
+    if method == "32p99":
+        cmd = [
+            args.python,
+            str(PREPROC_DIR / "32perfile_p99_standardization.py"),
+            "--src-root", str(resampled_root),
+            "--out-root", str(normalized_root),
+        ]
+        if selected_patients:
+            cmd.extend(["--patient-ids", *selected_patients])
+        elif args.body_part_filter is None:
+            cmd.append("--all-data")
+        run_command(cmd, cwd=PREPROC_DIR, env=env_base, label="STEP 30")
+        return
+
+    if method == "33nyul":
+        nyul_base = base_root / method_folder_name("33nyul")
+        nyul_ready = nyul_base / "3_1NiftiNyulReady"
+        nyul_flat = nyul_base / "3_2normalized"
+        stage_cmd = [
+            args.python,
+            str(PREPROC_DIR / "33_1prepare_for_nyul.py"),
+            "--input-root", str(resampled_root),
+            "--output-root", str(nyul_ready),
+            "--manifest", str(manifest_path),
+        ]
+        if args.body_part_filter is None:
+            stage_cmd.append("--all-data")
+        run_command(stage_cmd, cwd=PREPROC_DIR, env=env_base, label="STEP 30")
+
+        nyul_env = env_base.copy()
+        nyul_env.update({
+            "BASE_ROOT": str(nyul_base),
+            "NYUL_READY": str(nyul_ready),
+            "TRAIN_ROOT": str(nyul_ready / "trainingforcalc"),
+            "VALTEST_ROOT": str(nyul_ready / "valtest"),
+            "OUT_ROOT": str(nyul_flat),
+            "MODEL_PATH": str(nyul_base / "nyul_model_params.npy"),
+        })
+        run_command(
+            ["bash", str(PREPROC_DIR / "33_2nyul_run.sh")],
+            cwd=PREPROC_DIR,
+            env=nyul_env,
+            label="STEP 30",
+        )
+
+        finalize_cmd = [
+            args.python,
+            str(PREPROC_DIR / "33_3_create_nyul_case_folders.py"),
+            "--baseline-root", str(resampled_root),
+            "--nyul-root", str(nyul_flat),
+            "--out-root", str(normalized_root),
+            "--copy-ct",
+            "--ct-root", str(resampled_root),
+            "--overwrite",
+        ]
+        if args.body_part_filter == "AB":
+            finalize_cmd.append("--abdomen-only")
+        run_command(finalize_cmd, cwd=PREPROC_DIR, env=env_base, label="STEP 30")
+        return
+
+    if method in {
+        "34normalized_n4_03LIC",
+        "34normalized_n4_08LIC",
+        "34normalized_n4_centerspecific_03LIC",
+        "34normalized_n4_centerspecific_08LIC",
+    }:
+        cmd = [
+            args.python,
+            str(PREPROC_DIR / "34_npeaks.py"),
+            "--method", method,
+            "--base-root", str(base_root),
+            "--src-root", str(resampled_root),
+            "--manifest", str(manifest_path),
+            "--out-root", str(normalized_root),
+            "--disable-visualization",
+        ]
+        if selected_patients:
+            cmd.extend(["--patient-ids", *selected_patients])
+        run_command(cmd, cwd=PREPROC_DIR, env=env_base, label="STEP 30")
+        return
+
+    raise RuntimeError(f"Unsupported preprocessing method: {method}")
+
+
 def get_dataset_roots(base_root: Path, method: str, body_part_filter: str | None, gan_method: str) -> tuple[Path, Path]:
+    method_root = base_root / method_folder_name(method)
     if body_part_filter is None:
-        pix_root = base_root / method / "6materialized_splits" / "pix2pix" / "AB"
-        cycle_root = base_root / method / "6materialized_splits" / "cyclegan"
+        pix_root = method_root / "6materialized_splits" / "pix2pix" / "AB"
+        cycle_root = method_root / "6materialized_splits" / "cyclegan"
     else:
-        pix_root = base_root / method / "7materialized_splits_BodyRegion" / body_part_filter / "pix2pix" / "AB"
-        cycle_root = base_root / method / "7materialized_splits_BodyRegion" / body_part_filter / "cyclegan"
+        pix_root = method_root / "7materialized_splits_BodyRegion" / body_part_filter / "pix2pix" / "AB"
+        cycle_root = method_root / "7materialized_splits_BodyRegion" / body_part_filter / "cyclegan"
 
     if gan_method == "pix2pix":
         return pix_root, pix_root
@@ -456,7 +569,7 @@ def test_command(
 ) -> tuple[list[str], Path]:
     checkpoints_dir = base_root / "8checkpoints"
     results_dir = base_root / "100results"
-    mask_dir = base_root / args.preprocessing_method / "5slices" / "masks"
+    mask_dir = base_root / method_folder_name(args.preprocessing_method) / "5slices" / "masks"
     common = [
         "--dataroot", str(test_root),
         "--checkpoints_dir", str(checkpoints_dir),
@@ -631,24 +744,15 @@ def main() -> int:
 
     if should_run(30, args.start, args.end):
         print_step_start(30, "normalization")
-        if args.preprocessing_method not in SUPPORTED_NORMALIZATION_RUNNERS:
-            raise RuntimeError(
-                f"Automatic step 30 currently supports {sorted(SUPPORTED_NORMALIZATION_RUNNERS)}. "
-                f"For {args.preprocessing_method}, prepare the normalized folder separately and restart from step 40 "
-                f"or pass --normalized-input-root."
-            )
-        script_name = "31baseline_standardization.py" if args.preprocessing_method == "31baseline" else "32perfile_p99_standardization.py"
-        cmd = [
-            args.python,
-            str(PREPROC_DIR / script_name),
-            "--src-root", str(resampled_root),
-            "--out-root", str(normalized_root),
-        ]
-        if selected_patients:
-            cmd.extend(["--patient-ids", *selected_patients])
-        elif args.body_part_filter is None:
-            cmd.append("--all-data")
-        run_command(cmd, cwd=PREPROC_DIR, env=env_base, label="STEP 30")
+        run_normalization_step(
+            args,
+            base_root=base_root,
+            resampled_root=resampled_root,
+            manifest_path=manifest_path,
+            normalized_root=normalized_root,
+            selected_patients=selected_patients,
+            env_base=env_base,
+        )
         print_step_end(30, "normalization")
     elif args.normalized_input_root is not None and args.normalized_input_root != normalized_root:
         remove_path(normalized_root)
@@ -671,8 +775,9 @@ def main() -> int:
 
     if should_run(50, args.start, args.end):
         print_step_start(50, "materialize split folder structure")
-        slices_root = base_root / args.preprocessing_method / "5slices"
-        out_dir = base_root / args.preprocessing_method / "6materialized_splits"
+        method_root = base_root / method_folder_name(args.preprocessing_method)
+        slices_root = method_root / "5slices"
+        out_dir = method_root / "6materialized_splits"
         cmd = [
             args.python,
             str(PREPROC_DIR / "50_split_folderstructure.py"),

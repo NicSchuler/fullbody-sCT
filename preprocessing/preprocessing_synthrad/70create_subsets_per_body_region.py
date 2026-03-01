@@ -6,7 +6,6 @@
         python 70create_subsets_per_body_region.py 31baseline
         python 70create_subsets_per_body_region.py 32p99
         python 70create_subsets_per_body_region.py 33nyul
-        python 70create_subsets_per_body_region.py 34npeaks
     
     If no argument is provided, uses default: 32p99
     
@@ -30,6 +29,10 @@ BASE_ROOT = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preproce
 ROOT = None
 
 
+def method_folder_name(method: str) -> str:
+    return f"3_{method}"
+
+
 def configure_paths(method: str):
     """Configure paths based on normalization method."""
     global ROOT
@@ -42,7 +45,7 @@ def configure_paths(method: str):
             f"Valid options: {valid_methods}"
         )
     
-    ROOT = str(BASE_ROOT / method / "6materialized_splits")
+    ROOT = str(BASE_ROOT / method_folder_name(method) / "6materialized_splits")
     
     if not os.path.exists(ROOT):
         raise FileNotFoundError(

@@ -33,7 +33,7 @@ import nibabel as nib
 # ===================== CONFIG =====================
 
 # NORMALIZATION_METHOD: Choose which preprocessing pipeline to use
-# Options: "31baseline", "32p99", "33nyul", "34npeaks" "34normalized_n4_03LIC", "34normalized_n4_08LIC", "34normalized_n4_centerspecific_03LIC", "34normalized_n4_centerspecific_08LIC"
+# Options: "31baseline", "32p99", "33nyul", "34normalized_n4_03LIC", "34normalized_n4_08LIC", "34normalized_n4_centerspecific_03LIC", "34normalized_n4_centerspecific_08LIC"
 # Can be overridden via command line argument: python 40slice_creator.py 32p99
 NORMALIZATION_METHOD = "32p99"  # Default: per-file p99
 
@@ -61,6 +61,10 @@ SKIP_FIRST_LAST = True
 CLAMP_MR = False
 
 # ==================================================
+
+
+def method_folder_name(method: str) -> str:
+    return f"3_{method}"
 
 
 def safe_rmtree_and_make(path: str):
@@ -330,12 +334,13 @@ def configure_paths(method: str, custom_base_root: str = None, mr_only: bool = F
     base = custom_base_root if custom_base_root else BASE_ROOT
 
     # Input: normalized data from 31-34 scripts
-    CT_ROOT = os.path.join(base, method, "3normalized")
-    MR_ROOT = os.path.join(base, method, "3normalized")
-    SLICE_ROOT = os.path.join(base, method, "3normalized")
+    method_dir = method_folder_name(method)
+    CT_ROOT = os.path.join(base, method_dir, "3normalized")
+    MR_ROOT = os.path.join(base, method_dir, "3normalized")
+    SLICE_ROOT = os.path.join(base, method_dir, "3normalized")
 
     # Output: slices with matching suffix
-    OUT_ROOT = os.path.join(base, method, "5slices")
+    OUT_ROOT = os.path.join(base, method_dir, "5slices")
 
     # Verify input directories exist (only check MR if mr_only mode)
     if not os.path.exists(MR_ROOT):
@@ -379,7 +384,7 @@ Examples:
         "normalization_method",
         nargs="?",
         default="32p99",
-        choices=["31baseline", "32p99", "33nyul", "34npeaks", "34normalized_n4_03LIC", "34normalized_n4_08LIC", "34normalized_n4_centerspecific_03LIC", "34normalized_n4_centerspecific_08LIC"],
+        choices=["31baseline", "32p99", "33nyul", "34normalized_n4_03LIC", "34normalized_n4_08LIC", "34normalized_n4_centerspecific_03LIC", "34normalized_n4_centerspecific_08LIC"],
         help="Normalization method (default: 32p99)"
     )
     parser.add_argument(

@@ -6,7 +6,6 @@ Examples:
     python 60combine_A_B_for_pix2pix.py 31baseline
     python 60combine_A_B_for_pix2pix.py 32p99
     python 60combine_A_B_for_pix2pix.py 33nyul
-    python 60combine_A_B_for_pix2pix.py 34npeaks
 
 If no argument is provided, uses default: 32p99
 """
@@ -29,6 +28,10 @@ BASE_ROOT = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preproce
 ROOT = None
 
 
+def method_folder_name(method: str) -> str:
+    return f"3_{method}"
+
+
 def configure_paths(method: str):
     """Configure paths based on normalization method."""
     global ROOT
@@ -42,7 +45,7 @@ def configure_paths(method: str):
             f"Valid options: {valid_methods}"
         )
     
-    ROOT = BASE_ROOT / method / "6materialized_splits" / "pix2pix"
+    ROOT = BASE_ROOT / method_folder_name(method) / "6materialized_splits" / "pix2pix"
     
     if not ROOT.exists():
         raise FileNotFoundError(
