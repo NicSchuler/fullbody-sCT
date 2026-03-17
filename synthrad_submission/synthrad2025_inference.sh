@@ -47,9 +47,9 @@ PREPROC_ENV="preprocessing_env_docker"
 MODEL_ENV="inference_env_docker"
 
 # Default values (can be overridden via command line)
-GC_INPUT_DIR="/local/scratch/datasets/FullbodySCT/nicolas_test_pipeline/input"
-GC_OUTPUT_DIR="/local/scratch/datasets/FullbodySCT/nicolas_test_pipeline/output"
-OUTPUT_DIR="/local/scratch/datasets/FullbodySCT/nicolas_test_pipeline/temp"
+GC_INPUT_DIR="/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/input"
+GC_OUTPUT_DIR="/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/output"
+OUTPUT_DIR="/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/temp"
 CHECKPOINT_DIR="/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/8checkpoints"
 MODEL_TYPE="cycleGAN"
 BODYREGION_TYPE="allregions"

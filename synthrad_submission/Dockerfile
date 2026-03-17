@@ -98,7 +98,7 @@ COPY --from=checkpoint-selector --chown=algorithm:algorithm \
 # Pipeline script and Docker entrypoint
 # ---------------------------------------------------------------------------
 
-COPY --chown=algorithm:algorithm synthrad2025_inference.sh /opt/algorithm/
+COPY --chown=algorithm:algorithm synthrad_submission/synthrad2025_inference.sh /opt/algorithm/
 COPY --chown=algorithm:algorithm synthrad_submission/docker_entrypoint.sh /opt/algorithm/
 COPY --chown=algorithm:algorithm synthrad_submission/load_input.py /opt/algorithm/synthrad_submission/
 COPY --chown=algorithm:algorithm synthrad_submission/find_model_ex1.py /opt/algorithm/synthrad_submission/
