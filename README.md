@@ -65,6 +65,8 @@ Numbered scripts (`10`–`70`) implementing each preprocessing step. A complete 
 - `33` — Nyul histogram normalization
 - `34` — N-peaks intensity normalization (with LIC variants)
 
+Some preprocessing code was on [medical-physics-usz/synthetic_CT_generation](https://github.com/medical-physics-usz/synthetic_CT_generation) and [medical-physics-usz/NPeaks](https://github.com/medical-physics-usz/NPeaks).
+
 ### `training/`
 PyTorch training code adapted from [junyanz/pytorch-CycleGAN-and-pix2pix](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix).
 
