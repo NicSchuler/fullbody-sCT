@@ -101,6 +101,8 @@ For the `synthrad_submission` Docker container, see `synthrad_submission/require
 
 ## Quick Start
 
+Preliminary: Download data from [SynthRAD 2025](https://zenodo.org/records/15373853) and [SynthRAD 2023](https://synthrad2023.grand-challenge.org/) (needs login creation) and store into "data-root".  
+
 ```bash
 # Run the full pipeline (example: pix2pix, baseline normalization, abdomen region)
 python run_pipeline.py \
