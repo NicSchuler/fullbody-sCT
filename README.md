@@ -2,6 +2,8 @@
 
 A research framework for **full-body synthetic CT (sCT) generation from MRI**, investigating how modelling choices and data processing decisions affect image quality. The codebase supports end-to-end experiments from raw data ingestion through training, inference, and evaluation.
 
+![Title Slide](resources/Title-Slide.png)
+
 ## Research Objectives, Experiments & Pipeline Overview
 
 Three controlled experiments were conducted:
@@ -12,7 +14,7 @@ Three controlled experiments were conducted:
 | 2 | How does **MR input normalization** affect sCT quality? | Compare four normalization strategies: baseline (min-max), per-file p99, Nyul histogram, and n-peaks |
 | 3 | How do **alternative architectures** compare? | Benchmark pix2pix, CycleGAN, CUT, and a Swin V2 UNet generator |
 
-![Experiments Overview](Experiments%20Overview.jpg)
+![Experiments Overview](resources/Experiments%20Overview.jpg)
 
 ## Repository Structure
 
@@ -65,7 +67,7 @@ Numbered scripts (`10`–`70`) implementing each preprocessing step. A complete 
 - `33` — Nyul histogram normalization
 - `34` — N-peaks intensity normalization (with LIC variants)
 
-Some preprocessing code was on [medical-physics-usz/synthetic_CT_generation](https://github.com/medical-physics-usz/synthetic_CT_generation) and [medical-physics-usz/NPeaks](https://github.com/medical-physics-usz/NPeaks).
+Some preprocessing code was based on [medical-physics-usz/synthetic_CT_generation](https://github.com/medical-physics-usz/synthetic_CT_generation) and [medical-physics-usz/NPeaks](https://github.com/medical-physics-usz/NPeaks).
 
 ### `training/`
 PyTorch training code adapted from [junyanz/pytorch-CycleGAN-and-pix2pix](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix).
