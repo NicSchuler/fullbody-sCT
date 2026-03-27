@@ -38,7 +38,7 @@ USE_TRAIN_FOR_TARGETS = True
 # -----------------------------------------------------------------------------
 # N4 Bias Field Correction Settings
 # -----------------------------------------------------------------------------
-N4_PASSES = 2  # 0 = no correction, 1 = once, 2 = twice
+N4_PASSES = 1  # 0 = no correction, 1 = once, 2 = twice
 N4_FITTING_LEVELS = 5
 N4_ITERATIONS_PER_LEVEL = 75
 N4_CONVERGENCE_THRESHOLD = 0.01
@@ -68,7 +68,7 @@ USE_ZERO_ANCHOR = True
 # -----------------------------------------------------------------------------
 # Center-Specific Normalization
 # -----------------------------------------------------------------------------
-CENTER_SPECIFIC = True  # Compute targets per center (A, B, C)
+CENTER_SPECIFIC = False  # Compute targets per center (A, B, C)
 RECOMPUTE_TARGETS = True  # Set to True to recompute targets from all patients
 
 FIXED_TARGETS = {
