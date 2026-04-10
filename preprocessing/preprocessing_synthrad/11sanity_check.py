@@ -6,6 +6,15 @@ from pathlib import Path
 path = Path("/local/scratch/datasets/FullbodySCT/Synthrad_combined_preprocessed/1initNifti")
 
 def get_first_nifti(folder: pathlib.Path):
+    """Return the first NIfTI file found in ``folder``, preferring .nii.gz over .nii.
+
+    Args:
+        folder: Directory to search.
+
+    Returns:
+        Path to the first matching file, or None if the folder does not exist
+        or contains no NIfTI files.
+    """
     if not folder.exists():
         return None
     for ext in ("*.nii.gz", "*.nii"):
@@ -16,6 +25,19 @@ def get_first_nifti(folder: pathlib.Path):
 
 
 def check_case(case_dir: pathlib.Path):
+    """Verify that the CT and MR volumes for a case share the same size, spacing, and direction.
+
+    Reads the first NIfTI file found in ``case_dir/CT_reg`` and
+    ``case_dir/MR`` and compares their SimpleITK metadata.  Prints a
+    one-line status tag for the case:
+
+    * ``[OK]``   – all three properties match.
+    * ``[MISS]`` – CT or MR file is absent.
+    * ``[MISM]`` – at least one property differs (details printed below).
+
+    Args:
+        case_dir: Top-level patient directory (e.g. ``1initNifti/AB_1ABA001``).
+    """
     ct_dir = case_dir / "CT_reg"
     mr_dir = case_dir / "MR"
 
@@ -46,6 +68,7 @@ def check_case(case_dir: pathlib.Path):
 
 
 def main():
+    """Run ``check_case`` on every patient subdirectory under ``path``."""
     for case_dir in sorted(path.iterdir()):
         if case_dir.is_dir():
             check_case(case_dir)

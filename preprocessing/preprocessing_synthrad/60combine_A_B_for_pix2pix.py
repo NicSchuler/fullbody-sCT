@@ -59,7 +59,24 @@ def configure_paths(method: str):
     print("=" * 60)
 
 def concat_nifti_pair(path_a: Path, path_b: Path, out_path: Path):
-    """Load two NIfTI files, concatenate vertically (A on top, B below), save as NIfTI."""
+    """Concatenate two NIfTI slices along axis 1 (height) and save the result.
+
+    Both inputs must have identical shapes.  3-D arrays with a trailing
+    singleton channel (H×W×1) are squeezed to 2-D before concatenation and
+    a new singleton dimension is appended afterwards, yielding an output of
+    shape (H, 2W, 1).  In image space this places domain A on the top half
+    and domain B on the bottom half (pix2pix convention).
+
+    The affine and header of ``path_a`` are preserved in the output.
+
+    Args:
+        path_a: Path to the domain-A NIfTI slice (e.g. MR).
+        path_b: Path to the domain-B NIfTI slice (e.g. CT).
+        out_path: Destination path for the concatenated AB NIfTI file.
+
+    Raises:
+        ValueError: If the two arrays do not share the same shape.
+    """
     img_a = nib.load(str(path_a))
     img_b = nib.load(str(path_b))
 

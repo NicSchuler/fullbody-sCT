@@ -1,4 +1,40 @@
 #!/usr/bin/env python3
+"""
+End-to-end pipeline orchestrator for the fullbody sCT (SynthRAD) project.
+
+Runs the full sequence of preprocessing, training, inference, postprocessing,
+and evaluation steps by invoking the corresponding numbered scripts as
+subprocesses. Each step can be individually targeted using --start and --end.
+
+Pipeline step order:
+    10  - Convert raw MHA/NIfTI to unified 1initNifti layout
+    12  - Generate CT body masks via thresholding
+    13  - Run TotalSegmentator on init NIfTIs (CT + MR)
+    20  - Resample / crop / pad volumes to target XY size
+    21  - Build patient-level train/val/test split manifest
+    22  - Resample TotalSegmentator masks to match step 20 output
+    30  - Intensity normalisation (baseline / p99 / Nyul / N4+LIC)
+    40  - Extract 2-D axial slices from 3-D volumes
+    50  - Materialise train/val/test folder structure
+    60  - Concatenate A+B slice pairs for pix2pix
+    70  - Create per-body-region subsets
+    80  - Train the chosen GAN model
+    90  - Run inference / test
+    100 - Reconstruct 3-D sCT volumes from 2-D predictions
+    110 - Compute per-volume quantitative metrics
+    120 - Resample reconstructed volumes back to original patient space
+    130-150 - DVH export steps
+
+Usage:
+    python pipeline/run_pipeline.py \\
+        --synthrad-data-root /data/SynthRAD \\
+        --subfolder-name experiment1 \\
+        --preprocessing-method 32p99 \\
+        --method pix2pix \\
+        --epochs 50 \\
+        --batch-size 1 \\
+        [--start 10] [--end 150]
+"""
 from __future__ import annotations
 
 import argparse

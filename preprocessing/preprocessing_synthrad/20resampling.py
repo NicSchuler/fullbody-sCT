@@ -30,6 +30,28 @@ def crop_pad_xy(arr: np.ndarray,
                 background: float,
                 current_spacing: tuple
         ) -> np.ndarray:
+    """Center-crop or pad an array to the region-appropriate XY target size, then downsample if needed.
+
+    For large body regions (TH, AB, PELVIS) the target is 512×512 before a
+    2× spatial downsample to 256×256 (spacing is doubled in x/y accordingly).
+    For smaller regions (HN, BRAIN) the target is 256×256 with no resampling.
+
+    Padding (with ``background`` fill) is applied symmetrically when the input
+    is smaller than the target; centre-cropping is applied when it is larger.
+
+    Args:
+        arr: 3-D numpy array with shape (z, y, x).
+        body_part: Body-region prefix extracted from the filename
+            (e.g. "AB", "TH", "PELVIS", "HN", "BRAIN"). Case-insensitive.
+        background: Constant fill value used for padding and for the
+            default pixel value during SITK resampling.
+        current_spacing: Current voxel spacing as a 3-tuple (sx, sy, sz) in mm.
+
+    Returns:
+        Tuple (out_arr, out_spacing) where out_arr has shape (z, 256, 256)
+        and out_spacing is the updated spacing (may differ from current_spacing
+        for TH/AB/PELVIS after 2× downsampling).
+    """
     # ---------------------------------------------
     #   Region-based target size BEFORE resampling
     # ---------------------------------------------
@@ -192,9 +214,30 @@ def process_image(
     mask_out_path: Path = None,
     crop_to_mask: bool = True,
 ):
-    """
-    Load NIfTI from in_path, center crop/pad x/y to TARGET_SIZE_XY,
-    preserve spacing/origin/direction, and write to out_path.
+    """Load, spatially normalise, optionally mask, and save a NIfTI volume.
+
+    Processing order:
+        1. If ``crop_to_mask=True``, crop both the image and mask to the mask's
+           XY bounding box (smallest rectangle containing all foreground).
+        2. Call ``crop_pad_xy`` to centre-pad/crop the result to the
+           region-appropriate target size (256×256 for HN/BRAIN, or 512×512
+           downsampled to 256×256 for TH/AB/PELVIS).
+        3. Zero out voxels outside the mask.
+        4. Write the output preserving the original direction; origin and
+           spacing are updated to reflect any cropping/downsampling.
+
+    Args:
+        in_path: Path to the input NIfTI volume (CT or MR).
+        out_path: Destination path for the processed volume.
+        background: Fill value for padded voxels and out-of-mask voxels
+            (e.g. ``CT_BACKGROUND = -1024``, ``MR_BACKGROUND = 0``).
+        mask_path: Path to the corresponding binary body mask (required).
+        save_mask: If True, also write the processed mask to ``mask_out_path``.
+        mask_out_path: Destination path for the processed mask; used only when
+            ``save_mask=True``.
+        crop_to_mask: If True (default), pre-crop to the mask bounding box
+            before the pad/crop step.  Set to False to use centre crop/pad only
+            (e.g. for inference when tight cropping is undesirable).
     """
     # load image and mask
     img = sitk.ReadImage(str(in_path))

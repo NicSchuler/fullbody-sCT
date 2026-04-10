@@ -42,6 +42,21 @@ DEFAULT_PREFIXES = ("AB_",)
 
 
 def find_modality_nii(case_dir: Path, modality_dir: str, name_hint: str) -> Optional[Path]:
+    """Locate a NIfTI file for a given modality within a case directory.
+
+    First tries to find a file whose name contains ``name_hint`` (e.g.
+    ``"CT_reg"`` or ``"MR"``); falls back to the first NIfTI file in the
+    directory if no hint match is found.
+
+    Args:
+        case_dir: Top-level patient directory.
+        modality_dir: Subdirectory name for the modality (``"CT_reg"`` or ``"MR"``).
+        name_hint: Substring to prefer in the filename search.
+
+    Returns:
+        Path to the located NIfTI file, or None if the directory does not
+        exist or contains no NIfTI files.
+    """
     modality_path = case_dir / modality_dir
     if not modality_path.is_dir():
         return None
@@ -62,6 +77,25 @@ def has_fat_masks(output_dir: Path) -> bool:
 
 
 def run_totalseg_for_image(image_path: Path, modality_dir: str, device: str) -> None:
+    """Run TotalSegmentator on a single image for liver and tissue-type segmentation.
+
+    Executes two TotalSegmentator tasks (skipping each if the expected output
+    already exists):
+        1. ``total`` / ``total_mr`` – extracts the liver ROI subset.
+        2. ``tissue_types`` / ``tissue_types_mr`` – extracts subcutaneous fat,
+           torso fat, and skeletal muscle.
+
+    For CT (``modality_dir != "MR"``) the ``total`` task uses ``fast=True``;
+    for MR, ``fast=False`` is used throughout.  Results are written to
+    ``<image_path.parent>/totalsegmentator_output/``.
+
+    Args:
+        image_path: Path to the NIfTI volume to segment.
+        modality_dir: Modality identifier; use ``"MR"`` to switch to MR-specific
+            TotalSegmentator tasks.
+        device: Compute device passed to TotalSegmentator (``"gpu"``, ``"cpu"``,
+            or ``"mps"``).
+    """
     output_dir = image_path.parent / "totalsegmentator_output"
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -90,6 +124,15 @@ def run_totalseg_for_image(image_path: Path, modality_dir: str, device: str) -> 
 
 
 def should_include_case(case_name: str, prefixes: tuple[str, ...]) -> bool:
+    """Return True if ``case_name`` starts with any of the given prefixes.
+
+    Args:
+        case_name: Patient/case directory name (e.g. ``"AB_1ABA001"``).
+        prefixes: Tuple of allowed prefixes (e.g. ``("AB_", "HN_")``).
+
+    Returns:
+        True if the case should be processed, False otherwise.
+    """
     return any(case_name.startswith(prefix) for prefix in prefixes)
 
 

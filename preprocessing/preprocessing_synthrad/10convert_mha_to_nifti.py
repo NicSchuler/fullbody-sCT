@@ -37,7 +37,25 @@ def find_input(path_base: pathlib.Path):
 
 
 def convert_case(case_dir: pathlib.Path, site_name: str, out_root: pathlib.Path):
-    """
+    """Convert one raw patient case (MHA or NIfTI) into the unified 1initNifti layout.
+
+    Reads ``ct``, ``mr``, and optionally ``mask`` files from ``case_dir``
+    (supporting ``.mha``, ``.nii.gz``, and ``.nii`` formats).  MHA files are
+    decoded with SimpleITK and written as NIfTI; plain NIfTI files are copied
+    directly.  The mask is cast to uint8 before saving.
+
+    Output directory structure::
+
+        out_root/<site_name>_<patient_raw>/
+            CT_reg/<site_name>_<patient_raw>_CT_reg.nii[.gz]
+            MR/<site_name>_<patient_raw>_MR.nii[.gz]
+            masks/<site_name>_<patient_raw>_mask.nii[.gz]  (if mask present)
+
+    Args:
+        case_dir: Raw patient directory (e.g. ``Task1/AB/1ABA001``).
+        site_name: Body-region / site prefix read from the parent directory
+            name (e.g. ``"AB"``, ``"HN"``). Prepended to the patient ID.
+        out_root: Root output directory (``1initNifti``).
     """
     patient_raw = case_dir.name
     patient_id = f"{site_name}_{patient_raw}"

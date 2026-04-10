@@ -96,6 +96,17 @@ def make_output_dirs(base_model: str, base_pix: str):
 
 
 def find_ct_nifti_for_patient(patient_dir: str):
+    """Return the path to the first CT NIfTI file found in ``<patient_dir>/CT_reg/``.
+
+    Prefers compressed (``.nii.gz``) over uncompressed (``.nii``) files.
+
+    Args:
+        patient_dir: Full path to the patient's normalised data directory.
+
+    Returns:
+        Absolute path string of the first matching CT file, or None if the
+        ``CT_reg`` subdirectory does not exist or contains no NIfTI files.
+    """
     ct_dir = os.path.join(patient_dir, "CT_reg")
     if not os.path.isdir(ct_dir):
         return None

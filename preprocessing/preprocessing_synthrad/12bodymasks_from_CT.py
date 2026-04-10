@@ -10,6 +10,20 @@ THRESHOLD_CT = -400
 
 # from medical-physics-usz/synthetic_CT_generation/preprocessing/new_helpers.py
 def get_mask_biggest_contour(mask_ct):
+    """Keep only the largest connected contour on each 2-D axial slice of a 3-D mask.
+
+    Iterates over every z-slice, detects all external contours with OpenCV,
+    and retains only the one with the maximum area (the body outline).
+    All other foreground voxels on that slice are set to zero.  Slices with
+    no foreground are left unchanged.
+
+    Args:
+        mask_ct: np.ndarray of shape (H, W, D) with uint8 binary values
+            (0 = background, 1 = foreground).  Modified in-place.
+
+    Returns:
+        The same array with each slice reduced to its largest contour.
+    """
     for i in range(mask_ct.shape[2]):
         inmask = np.expand_dims(mask_ct[:, :, i].astype(np.uint8), axis=2)
         ret, bin_img = cv2.threshold(inmask, 0.5, 1, cv2.THRESH_BINARY)
@@ -40,7 +54,26 @@ def save_nifti_image(data, affine, file_path):
 
 # from medical-physics-usz/synthetic_CT_generation/preprocessing/new_helpers.py
 # modified with binary closing and hole filling
-def get_body_mask_threshold(nii_array,threshold_ct_body_mask):
+def get_body_mask_threshold(nii_array, threshold_ct_body_mask):
+    """Generate a binary body mask from a CT volume using HU thresholding and morphological cleanup.
+
+    Pipeline:
+        1. Threshold: voxels above ``threshold_ct_body_mask`` HU → 1, rest → 0.
+        2. Binary erosion (2 iterations) to remove thin noise bridges.
+        3. Keep largest per-slice contour (``get_mask_biggest_contour``).
+        4. Binary dilation (5 iterations) to recover eroded body border.
+        5. Binary closing with a 31×31×1 XY structuring element to seal
+           openings (e.g. nasal cavity).
+        6. 3-D hole filling to close any remaining interior voids.
+
+    Args:
+        nii_array: np.ndarray (H, W, D) of CT Hounsfield units.
+        threshold_ct_body_mask: HU threshold separating tissue from air/background.
+            Typically -400 HU.
+
+    Returns:
+        np.ndarray (H, W, D) of dtype int16 with 1 inside the body and 0 outside.
+    """
     mask_ct = np.zeros(nii_array.shape)
     mask_ct[nii_array > threshold_ct_body_mask] = 1
     mask_ct[nii_array <= threshold_ct_body_mask] = 0

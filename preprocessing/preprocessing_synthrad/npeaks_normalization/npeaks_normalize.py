@@ -18,8 +18,17 @@ DEFAULT_BRAIN_OUTLIER_CUTOFF_FRACTION = 0.01
 class NPeaksNormalizer:
 
     def __init__(self, visualizer=None, brainsplit_visualizer=None):
-        """
-        Initializes the normalizer with the given parameters. # TODO
+        """Initialise the N-Peaks normalizer with optional visualizers.
+
+        Args:
+            visualizer: Optional visualizer object for the peak-finding step.
+                When set, ``find_peaks_custom`` will call
+                ``visualizer.plot(...)`` after processing each mask.
+                See ``visualize.py`` for available implementations.
+            brainsplit_visualizer: Optional visualizer for the brain-mask
+                splitting step.  When set, ``split_brain_mask_custom`` will
+                call ``brainsplit_visualizer.visualize_histogram_split(...)``
+                after each split.
         """
         self.visualizer = visualizer
         self.brain_visualizer = brainsplit_visualizer

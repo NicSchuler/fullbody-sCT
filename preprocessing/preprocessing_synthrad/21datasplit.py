@@ -32,6 +32,24 @@ RE_2023 = re.compile(r"(?P<prefix>(?P<body>B|P)_)?(?P<token>1(?P<body2>B|P)?(?P<
 
 
 def find_patient_key(case_id: str) -> Optional[Tuple[str, str, str, int]]:
+    """Parse a SynthRAD case ID into its constituent (token, body, center, year) parts.
+
+    Supports two naming conventions:
+        * **SynthRAD 2025** – e.g. ``"AB_1ABA001"`` → token ``"1ABA001"``,
+          body ``"AB"``, center ``"A"``, year ``2025``.
+        * **SynthRAD 2023** – e.g. ``"B_1BA001"`` → token ``"1BA001"``,
+          body ``"B"``, center ``"A"``, year ``2023``.
+
+    The body region is first extracted from the optional prefix (before ``_``);
+    if absent it is read from the alphanumeric code directly.
+
+    Args:
+        case_id: Patient directory name as stored under ``2resampledNifti``.
+
+    Returns:
+        ``(token, body, center, year)`` tuple, or ``None`` if the case ID
+        matches neither known pattern.
+    """
     m = RE_2025.search(case_id)
     if m:
         token = m.group("token")
@@ -68,6 +86,26 @@ def collect_patients(root: Path) -> List[Dict[str, str]]:
 
 
 def stratified_split(items: List[Dict[str, str]], ratios: Tuple[float, float, float], seed: int):
+    """Split patients into train / val / test sets with stratification by body region and center.
+
+    Uses scikit-learn's ``train_test_split`` twice (test split first, then
+    val from the remaining pool) so that the ``body_center`` label distribution
+    is preserved in every subset.
+
+    Args:
+        items: List of patient dicts as returned by ``collect_patients``.
+            Each dict must contain a ``"label"`` key of the form
+            ``"<body>_<center>"`` used as the stratification target.
+        ratios: 3-tuple ``(r_train, r_val, r_test)`` that must sum to 1.0.
+        seed: Random seed for reproducible splits.
+
+    Returns:
+        Tuple ``(train, val, test)`` – three lists of patient dicts.
+
+    Raises:
+        RuntimeError: If scikit-learn is not installed.
+        ValueError: If the ratios do not sum to 1.0.
+    """
     if train_test_split is None:
         raise RuntimeError("scikit-learn is required. Please install scikit-learn >= 1.1.")
     assert items, "No patients found to split"
