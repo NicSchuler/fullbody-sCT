@@ -1,6 +1,6 @@
 # fullbody-sCT
 
-A research framework for **full-body synthetic CT (sCT) generation from MRI**, investigating how modelling choices and data processing decisions affect image quality. The codebase supports end-to-end experiments from raw data ingestion through training, inference, and evaluation.
+A research framework for **fullbody synthetic CT (sCT) generation from MRI**, investigating how modeling choices and data processing decisions affect image quality. The codebase supports end-to-end experiments from raw data ingestion through training, inference, and evaluation.
 
 ![Title Slide](resources/Title-Slide.png)
 
@@ -10,9 +10,9 @@ Three controlled experiments were conducted:
 
 | # | Question | Approach |
 |---|----------|----------|
-| 1 | How do **region-specific models** compare to a single full-body model? | Train and evaluate models on anatomical subsets (Brain, Head & Neck, Thorax, Abdomen, Pelvis) vs. combined full-body data |
+| 1 | How do **region-specific models** compare to a **single fullbody model**? | Train and evaluate models on anatomical subsets (Brain, Head & Neck, Thorax, Abdomen, Pelvis) vs. combined fullbody data |
 | 2 | How does **MR input normalization** affect sCT quality? | Compare four normalization strategies: baseline (min-max), per-file p99, Nyul histogram, and n-peaks |
-| 3 | How do **alternative architectures** compare? | Benchmark pix2pix, CycleGAN, CUT, and a Swin V2 UNet generator |
+| 3 | How do **alternative architectures** compare? | Benchmark pix2pix, to a SwinV2-UNet and ResNet generator |
 
 ![Experiments Overview](resources/Experiments%20Overview.jpg)
 
@@ -53,6 +53,8 @@ The full pipeline is orchestrated by `pipeline/run_pipeline.py` via sequentially
 | 110 | Metrics | Compute per-volume MAE, RMSE, SSIM |
 | 130–150 | DVH evaluation | Organ dose metrics for radiotherapy evaluation |
 
+Note on reproducibility: hyperparameters in the code have been set to the optimal values and the applied train/validation/test split can be found in `preprocessing/preprocessing_synthrad/splits_manifest.csv`.
+
 ## Folder Details
 
 ### `pipeline/`
@@ -76,7 +78,7 @@ PyTorch training code adapted from [junyanz/pytorch-CycleGAN-and-pix2pix](https:
 - `train_pure_swinv2.py` — Training for the Swin V2 UNet generator without GAN setting (pure L1 loss)
 - `test_synth.py` / `inference_synth.py` — Inference scripts used in the pipeline
 - `models/` — Model implementations (pix2pix, CycleGAN, Swin V2 UNet, networks)
-- `dvh_eval/` — Pipeline for DVH-based dose evaluation
+- `dvh_eval/` — Pipeline for DVH-based dose evaluation (incl. transform NIfTI to DICOM)
 
 ### `training_cut/`
 Separate implementation of the **CUT** (Contrastive Unpaired Translation) architecture, memory-efficient for unpaired MR→CT translation. Adapted from [taesungp/contrastive-unpaired-translation](https://github.com/taesungp/contrastive-unpaired-translation).
@@ -105,7 +107,7 @@ For the `synthrad_submission` Docker container, see `synthrad_submission/require
 
 ## Quick Start
 
-Preliminary: Download data from [SynthRAD 2025](https://zenodo.org/records/15373853) and [SynthRAD 2023](https://synthrad2023.grand-challenge.org/) (needs login creation) and store into "data-root".  
+Preliminary: Download data from [SynthRAD 2025](https://zenodo.org/records/15373853) and [SynthRAD 2023](https://synthrad2023.grand-challenge.org/) (needs login creation) and store into `<data-root>`.  
 
 ```bash
 # Run the full pipeline (example: pix2pix, baseline normalization, abdomen region)
@@ -117,7 +119,7 @@ python run_pipeline.py \
   --method pix2pix \
   --epochs 50 \
   --batch-size 1 \
-  --start 30
+  --start 10
 ```
 
 See `preprocessing/preprocessing_synthrad/USAGE_GUIDE.md` for detailed per-step instructions.
